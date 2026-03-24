@@ -30,13 +30,23 @@ export default function useAirTraffic(viewState: any) {
         const data = await response.json();
         
         if (data.ac) {
-           const mappedFlights = data.ac.map((ac: any) => ({
-             id: ac.hex,
-             callsign: ac.flight ? ac.flight.trim() : 'UNKNOWN',
-             coordinates: [ac.lon, ac.lat, (ac.alt_baro || 0) * 0.3048], // feet to meters
-             track: ac.track || 0,
-             velocity: ac.gs || 0 // ground speed in knots
-           }));
+           const mappedFlights = data.ac.map((ac: any) => {
+             const callsign = ac.flight ? ac.flight.trim() : 'UNKNOWN';
+             const isMil = ac.mil || ac.t?.startsWith('F') || ac.t?.startsWith('C1') || callsign.startsWith('RCH') || callsign.startsWith('AF1');
+             const category = isMil ? 'military' : 'civilian';
+             const system = callsign !== 'UNKNOWN' ? callsign.substring(0, 3) : 'General Aviation';
+
+             return {
+               id: ac.hex,
+               type: 'air',
+               category,
+               system,
+               callsign,
+               coordinates: [ac.lon, ac.lat, (ac.alt_baro || 0) * 0.3048],
+               track: ac.track || 0,
+               velocity: ac.gs || 0 
+             };
+           });
            setFlights(mappedFlights);
         }
       } catch (err) {

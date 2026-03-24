@@ -70,11 +70,26 @@ export default function useSpaceTraffic() {
             const positionGd = satellite.eciToGeodetic(positionAndVelocity.position, gmst);
             const longitude = satellite.degreesLong(positionGd.longitude);
             const latitude = satellite.degreesLat(positionGd.latitude);
-            const altitude = positionGd.height * 1000; // to meters
+            const altitude = positionGd.height * 1000;
+
+            let category = 'civilian';
+            let system = 'Unknown';
+            const upperName = sat.name.toUpperCase();
+            
+            if (upperName.includes('STARLINK')) { system = 'SpaceX'; category = 'civilian'; }
+            else if (upperName.includes('ONEWEB')) { system = 'OneWeb'; category = 'civilian'; }
+            else if (upperName.includes('IRIDIUM')) { system = 'Iridium'; category = 'civilian'; }
+            else if (upperName.includes('ISS') || upperName.includes('HUBBLE') || upperName.includes('NOAA') || upperName.includes('AQUA')) { category = 'research'; system = 'Science/Gov'; }
+            else if (upperName.includes('GPS') || upperName.includes('COSMOS') || upperName.includes('USA ') || upperName.includes('BEIDOU')) { category = 'military'; system = 'Defense'; }
+
             return {
               id: sat.name,
+              type: 'space',
+              category,
+              system,
               name: sat.name,
-              coordinates: [longitude, latitude, altitude]
+              coordinates: [longitude, latitude, altitude],
+              track: 0
             };
           }
           return null;

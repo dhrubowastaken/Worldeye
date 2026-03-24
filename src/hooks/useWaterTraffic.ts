@@ -46,12 +46,23 @@ export default function useWaterTraffic(viewState: any) {
              setShips(prev => {
                 const newData = [...prev];
                 const existingIdx = newData.findIndex(s => s.id === aisMessage.MetaData.MMSI);
+                
+                // ShipType 35 roughly maps to military, others to civilian/commercial
+                const isMil = report.ShipType === 35 || report.ShipType === 30;
+                const category = isMil ? 'military' : 'civilian';
+                let system = 'Commercial Marine';
+                if (report.ShipType >= 70 && report.ShipType <= 79) system = 'Cargo';
+                if (report.ShipType >= 80 && report.ShipType <= 89) system = 'Tanker';
+
                 const newShip = {
                   id: aisMessage.MetaData.MMSI,
+                  type: 'water',
+                  category,
+                  system,
                   name: aisMessage.MetaData.ShipName ? aisMessage.MetaData.ShipName.trim() : `MMSI: ${aisMessage.MetaData.MMSI}`,
                   coordinates: [report.Longitude, report.Latitude, 0],
                   speed: report.Sog || 0,
-                  heading: report.TrueHeading || 0
+                  track: report.TrueHeading || 0
                 };
                 
                 if (existingIdx !== -1) {
