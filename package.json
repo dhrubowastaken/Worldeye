@@ -6,7 +6,9 @@
   "scripts": {
     "start": "vite --open",
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && npm run copy:data",
+    "copy:data": "node -e \"const fs = require('fs'); const path = require('path'); const src = 'data'; const dest = 'dist/data'; if (!fs.existsSync(dest)) fs.mkdirSync(dest, {recursive: true}); fs.readdirSync(src).forEach(f => fs.copyFileSync(path.join(src, f), path.join(dest, f)));\"",
+    "build:satellites": "node scripts/build-satellite-names.cjs && node scripts/merge-satnogs-data.cjs && node scripts/merge-spacetrack-data.cjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },

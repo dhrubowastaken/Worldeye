@@ -19,23 +19,58 @@ export default function GlobeMonitor() {
   const [showAir, setShowAir] = useState(true);
   const [showSpace, setShowSpace] = useState(true);
   const [showWater, setShowWater] = useState(true);
+  const [spaceLoadingDone, setSpaceLoadingDone] = useState(false);
 
   // Advanced Filters
   const [catFilters, setCatFilters] = useState({ civilian: true, military: true, research: true });
   const [selectedSystem, setSelectedSystem] = useState('ALL');
+  const [entitySearch, setEntitySearch] = useState('');
 
-  const airTraffic = useAirTraffic(viewState);
-  const spaceTraffic = useSpaceTraffic();
-  const waterTraffic = useWaterTraffic(viewState);
+  const airTraffic = useAirTraffic(viewState, spaceLoadingDone);
+  const { satelliteData: spaceTraffic, error: spaceError } = useSpaceTraffic({ onLoadingComplete: () => setSpaceLoadingDone(true) });
+  const waterTraffic = useWaterTraffic(viewState, spaceLoadingDone);
 
   const onViewStateChange = useCallback(({ viewState }: any) => setViewState(viewState), []);
 
+  // Zoom to searched entity
+  const zoomToEntity = useCallback((entity: any) => {
+    if (!entity || !entity.coordinates) return;
+    
+    const [longitude, latitude] = entity.coordinates;
+    setViewState({
+      longitude,
+      latitude,
+      zoom: 8, // Zoom in closer to see the entity
+      minZoom: 0,
+      maxZoom: 10
+    });
+  }, []);
+
   const allDataCache = useMemo(() => {
+     // Delay visualization until space data load is complete
+     if (!spaceLoadingDone) return [];
      let air = showAir ? airTraffic : [];
      let space = showSpace ? spaceTraffic : [];
      let water = showWater ? waterTraffic : [];
      return [...air, ...space, ...water];
-  }, [airTraffic, spaceTraffic, waterTraffic, showAir, showSpace, showWater]);
+  }, [airTraffic, spaceTraffic, waterTraffic, showAir, showSpace, showWater, spaceLoadingDone]);
+
+  // Handle search input changes and zoom to first match
+  const handleSearchChange = useCallback((searchTerm: string) => {
+    setEntitySearch(searchTerm);
+    
+    if (searchTerm.trim()) {
+      // Find the first matching entity
+      const matchingEntity = allDataCache.find((d: any) => {
+        const normalized = `${d.id || ''} ${d.name || ''} ${d.callsign || ''}`.toLowerCase();
+        return normalized.includes(searchTerm.toLowerCase());
+      });
+      
+      if (matchingEntity) {
+        zoomToEntity(matchingEntity);
+      }
+    }
+  }, [allDataCache, zoomToEntity]);
 
   const uniqueSystems = useMemo(() => {
      const systems = new Set<string>();
@@ -47,9 +82,17 @@ export default function GlobeMonitor() {
      return allDataCache.filter((d: any) => {
         if (!catFilters[d.category as keyof typeof catFilters]) return false;
         if (selectedSystem !== 'ALL' && d.system !== selectedSystem) return false;
+        if (entitySearch && !(d.name || d.callsign || d.id).toLowerCase().includes(entitySearch.toLowerCase())) return false;
         return true;
      });
-  }, [allDataCache, catFilters, selectedSystem]);
+  }, [allDataCache, catFilters, selectedSystem, entitySearch]);
+
+  const usa247Found = useMemo(() => {
+    return allDataCache.some((d: any) => {
+      const normalized = `${d.id || ''} ${d.name || ''} ${d.callsign || ''}`.toUpperCase();
+      return normalized.includes('USA 247') || normalized.includes('43013');
+    });
+  }, [allDataCache]);
 
   const layers = useMemo(() => [
     new TileLayer({
@@ -169,6 +212,19 @@ export default function GlobeMonitor() {
               <option key={sys} value={sys}>{sys}</option>
             ))}
           </select>
+        </div>
+        
+        <div className="bg-cyan-950/80 p-2 text-cyan-300 font-bold tracking-widest text-[10px] border-b border-cyan-500/30 uppercase">
+          ENTITY SEARCH
+        </div>
+        <div className="p-3 text-xs">
+          <input 
+            type="text"
+            placeholder="Search entity name..."
+            value={entitySearch}
+            onChange={e => handleSearchChange(e.target.value)}
+            className="w-full bg-black/50 border border-cyan-500/30 text-cyan-200 p-2 outline-none focus:border-cyan-400"
+          />
         </div>
         
         <div className="p-2 text-[9px] text-cyan-700 bg-cyan-950/30 border-t border-cyan-500/30 text-center uppercase tracking-widest">

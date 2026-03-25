@@ -1,7 +1,10 @@
 import GlobeMonitor from './components/GlobeMonitor';
+import { LoadingProvider } from './components/LoadingContext';
+import LoadingBar from './components/LoadingBar';
+import { useLoading } from './components/LoadingContext';
 import './index.css';
 
-function App() {
+function AppContent() {
   return (
     <div className="w-full h-screen bg-black overflow-hidden relative font-mono text-white select-none">
       {/* HUD Header */}
@@ -14,7 +17,20 @@ function App() {
       {/* Main Globe Component */}
       <GlobeMonitor />
 
+      {/* Data Loading Bar (bottom left) */}
+      <LoadingBar type="general" />
+
+      {/* Auth Loading Bar (bottom right) */}
+      <LoadingBar type="auth" />
     </div>
+  );
+}
+
+function App() {
+  return (
+    <LoadingProvider>
+      <AppContent />
+    </LoadingProvider>
   );
 }
 

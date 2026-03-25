@@ -1,0 +1,14 @@
+# GitHub LFS configuration for large data files
+# Large JSON/data files should be tracked with Git LFS to keep repo size manageable
+
+data/**/*.json diff=lfs merge=lfs -text
+public/**/*.json diff=lfs merge=lfs -text filter=lfs
+
+# Satellite data files
+data/satellite-names.json diff=lfs merge=lfs -text
+public/satellite-names.json diff=lfs merge=lfs -text
+
+# Future data files matching patterns
+data/**/*.geojson diff=lfs merge=lfs -text
+data/**/*.csv diff=lfs merge=lfs -text
+data/**/*.db diff=lfs merge=lfs -text

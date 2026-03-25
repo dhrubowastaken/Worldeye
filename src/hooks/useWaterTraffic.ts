@@ -4,12 +4,22 @@ import { useState, useEffect, useRef } from 'react';
 // Drop your key here or in an environment variable.
 const AISSTREAM_API_KEY = import.meta.env.VITE_AISSTREAM_API_KEY || ''; 
 
-export default function useWaterTraffic(viewState: any) {
+export default function useWaterTraffic(viewState: any, enableLoading: boolean = true) {
   const [ships, setShips] = useState<any[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
   const debounceTimer = useRef<any>(null);
 
   useEffect(() => {
+    // Skip loading until space traffic is ready
+    if (!enableLoading) {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+      return;
+    }
+
     if (!AISSTREAM_API_KEY) {
       console.warn("AISSTREAM_API_KEY is not set. Water traffic will not load.");
       return;
@@ -87,7 +97,7 @@ export default function useWaterTraffic(viewState: any) {
     debounceTimer.current = setTimeout(connectToAISStream, 1500);
 
     return () => clearTimeout(debounceTimer.current);
-  }, [viewState]);
+  }, [viewState, enableLoading]);
 
   return ships;
 }

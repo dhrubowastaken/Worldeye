@@ -3,12 +3,18 @@ import { useState, useEffect, useRef } from 'react';
 // Use the local Vite proxy to bypass CORS
 const ADSB_API = '/api/adsb/v2';
 
-export default function useAirTraffic(viewState: any) {
+export default function useAirTraffic(viewState: any, enableLoading: boolean = true) {
   const [flights, setFlights] = useState<any[]>([]);
   const lastFetch = useRef(0);
   const debounceTimer = useRef<any>(null);
 
   useEffect(() => {
+    // Skip loading until space traffic is ready
+    if (!enableLoading) {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+      return;
+    }
+
     const fetchFlights = async () => {
       const now = Date.now();
       // Rate limit to once every 5 seconds per viewport change
@@ -59,7 +65,7 @@ export default function useAirTraffic(viewState: any) {
     debounceTimer.current = setTimeout(fetchFlights, 1000);
 
     return () => clearTimeout(debounceTimer.current);
-  }, [viewState]);
+  }, [viewState, enableLoading]);
 
   return flights;
 }

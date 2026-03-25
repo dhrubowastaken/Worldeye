@@ -22,3 +22,14 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+.env
+
+# Raw source data files (rebuilt using scripts/, committed data files tracked via Git LFS)
+satnogs_satellites.json
+spacetrack_full_satcat.json
+spacetrack_satcat.json
+
+# Temporary files
+tmp-*.js
+test_*.py
+test_*.mjs
