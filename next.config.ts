@@ -1,6 +1,14 @@
-import type { NextConfig } from "next";
+import path from 'node:path';
+
+import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+  experimental: {
+    webpackBuildWorker: false,
+  },
+  turbopack: {
+    root: path.resolve(__dirname),
+  },
   async rewrites() {
     return [
       {

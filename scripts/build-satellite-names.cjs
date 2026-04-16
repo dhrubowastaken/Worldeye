@@ -10,7 +10,7 @@ const path = require('path');
 const http = require('http');
 const https = require('https');
 
-const OUTPUT_FILE = path.join(__dirname, '../public/satellite-names.json');
+const OUTPUT_FILE = path.join(__dirname, '../public/data/satellite-names.json');
 
 // Same groups as useSpaceTraffic.ts
 const CELESTRAK_GROUPS = [
