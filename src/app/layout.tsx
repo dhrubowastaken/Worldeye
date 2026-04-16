@@ -1,9 +1,10 @@
-import type { Metadata } from "next";
-import "./globals.css";
+import type { Metadata } from 'next';
+
+import './globals.css';
 
 export const metadata: Metadata = {
-  title: "WORLD EYE",
-  description: "Real-time global traffic monitoring — Air, Sea, Space",
+  title: 'World Eye',
+  description: 'A modular, live intelligence globe for air, maritime, and orbital tracking.',
 };
 
 export default function RootLayout({

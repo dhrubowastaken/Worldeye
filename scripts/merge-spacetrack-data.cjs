@@ -8,7 +8,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const CACHE_FILE = path.join(__dirname, '../public/satellite-names.json');
+const CACHE_FILE = path.join(__dirname, '../public/data/satellite-names.json');
 const SPACETRACK_FILE = path.join(__dirname, '../spacetrack_full_satcat.json');
 
 function mergeSpaceTrackData() {
