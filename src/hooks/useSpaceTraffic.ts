@@ -1,10 +1,11 @@
+'use client';
+
 import { useState, useEffect, useRef } from 'react';
 import * as satellite from 'satellite.js';
 import { useLoading } from '../components/LoadingContext';
 import { classifySatellite, shortenName } from '../utils/satelliteCategoryMap';
-import { loadCacheFromFile, saveCacheToFile, fetchSatelliteNameFromN2YO, extractNoradIdFromTLE } from '../utils/satelliteNameResolver';
+import { loadCacheFromFile, saveCacheToFile, extractNoradIdFromTLE } from '../utils/satelliteNameResolver';
 
-// Parses TLE string into an array of satellite records
 function parseTLE(tleData: string) {
   const lines = tleData.split('\n');
   const satellites: Array<{ name: string; satrec: any; tleLine1: string; noradId?: string }> = [];
@@ -14,7 +15,6 @@ function parseTLE(tleData: string) {
       const tleLine1 = lines[i + 1].trim();
       const tleLine2 = lines[i + 2].trim();
 
-      // Extract NORAD ID from TLE line 1 if name is numeric
       let noradId: string | undefined;
       if (/^\d+$/.test(name)) {
         noradId = name;
@@ -42,9 +42,9 @@ HUBBLE SPACE TELESCOPE
 2 20580  28.4691 140.7580 0002882 329.1765 190.1706 15.09346648430752
 `;
 
-const SPACE_TRACK_USERNAME = import.meta.env.VITE_SPACE_TRACK_USERNAME || '';
-const SPACE_TRACK_PASSWORD = import.meta.env.VITE_SPACE_TRACK_PASSWORD || '';
-const N2YO_API_KEY = import.meta.env.VITE_N2YO_API_KEY || '';
+const SPACE_TRACK_USERNAME = process.env.NEXT_PUBLIC_SPACE_TRACK_USERNAME || '';
+const SPACE_TRACK_PASSWORD = process.env.NEXT_PUBLIC_SPACE_TRACK_PASSWORD || '';
+const N2YO_API_KEY = process.env.NEXT_PUBLIC_N2YO_API_KEY || '';
 
 console.log('Space-Track env vars loaded:', !!SPACE_TRACK_USERNAME, !!SPACE_TRACK_PASSWORD);
 console.log('N2YO API key loaded:', !!N2YO_API_KEY);
@@ -86,8 +86,6 @@ export default function useSpaceTraffic(options?: { onLoadingComplete?: () => vo
       updateProgress('auth-spacetrack', 100, 'Space-Track authentication successful');
       setTimeout(() => hideLoading('auth-spacetrack'), 1500);
 
-      // Official documented GP class (TLEs) endpoint (from Space-Track docs):
-      // /basicspacedata/query/class/gp/NORAD_CAT_ID/<100000/decay_date/null-val/epoch/>now-30/orderby/norad_cat_id/format/tle
       const gpUrl = '/api/space-track/basicspacedata/query/class/gp/NORAD_CAT_ID/%3C100000/decay_date/null-val/epoch/%3Enow-30/orderby/norad_cat_id/format/tle';
       console.log('Space-Track: Querying GP URL:', gpUrl);
 
@@ -113,9 +111,9 @@ export default function useSpaceTraffic(options?: { onLoadingComplete?: () => vo
 
         const tleData = await tleResponse.text();
         console.log('Space-Track: Received GP TLE data, length:', tleData.length);
-        const satellites = parseTLE(tleData);
-        console.log('Space-Track: Parsed satellites:', satellites.length);
-        return satellites;
+        const sats = parseTLE(tleData);
+        console.log('Space-Track: Parsed satellites:', sats.length);
+        return sats;
       } catch (err) {
         console.error('Space-Track fetch error:', err);
       }
@@ -129,9 +127,8 @@ export default function useSpaceTraffic(options?: { onLoadingComplete?: () => vo
       }
 
       showLoading('auth-n2yo', 'Authenticating with N2YO...');
-      const additionalSatellites = [];
+      const additionalSatellites: any[] = [];
 
-      // List of satellites to try fetching from N2YO (including classified ones)
       const noradIds = [43013]; // USA 247
 
       for (const noradId of noradIds) {
@@ -180,7 +177,6 @@ export default function useSpaceTraffic(options?: { onLoadingComplete?: () => vo
     };
 
     const fetchCelesTrak = async () => {
-      // Fetch TLEs from SatNOGS database
       try {
         const response = await fetch('https://db.satnogs.org/api/tle/?format=json');
         if (!response.ok) {
@@ -190,11 +186,10 @@ export default function useSpaceTraffic(options?: { onLoadingComplete?: () => vo
         const data = await response.json();
         console.log('SatNOGS: Fetched', data.length, 'TLEs');
 
-        // Convert JSON to TLE text format
         const tleData = data.map((sat: any) => `${sat.tle0}\n${sat.tle1}\n${sat.tle2}\n`).join('');
-        const satellites = parseTLE(tleData);
-        console.log('SatNOGS: Parsed', satellites.length, 'satellites');
-        return satellites;
+        const sats = parseTLE(tleData);
+        console.log('SatNOGS: Parsed', sats.length, 'satellites');
+        return sats;
       } catch (err) {
         console.error('SatNOGS fetch error:', err);
         return [];
@@ -206,7 +201,6 @@ export default function useSpaceTraffic(options?: { onLoadingComplete?: () => vo
         showLoading('space-data', 'Loading satellites from all sources...');
         updateProgress('space-data', 5);
 
-        // Step 1: Load from all sources in parallel
         console.log('Step 1: Fetching from all sources...');
         updateProgress('space-data', 10, 'Fetching Space-Track...');
         const spaceTrackSats = await fetchSpaceTrack();
@@ -217,70 +211,55 @@ export default function useSpaceTraffic(options?: { onLoadingComplete?: () => vo
         updateProgress('space-data', 50, 'Fetching N2YO...');
         const n2yoSats = await fetchN2YO();
 
-        // Step 2: Merge all sources
         console.log('Step 2: Merging sources...');
         updateProgress('space-data', 60, 'Merging satellite data...');
         
         const mergedMap = new Map();
         
-        // Add Space-Track first (highest priority)
         if (spaceTrackSats) {
           spaceTrackSats.forEach(sat => mergedMap.set(sat.name, sat));
         }
         
-        // Add CelesTrak (fill gaps)
         if (celesTrakSats) {
           celesTrakSats.forEach(sat => {
-            if (!mergedMap.has(sat.name)) {
-              mergedMap.set(sat.name, sat);
-            }
+            if (!mergedMap.has(sat.name)) mergedMap.set(sat.name, sat);
           });
         }
         
-        // Add N2YO (fill specific gaps)
         if (n2yoSats) {
           n2yoSats.forEach(sat => {
-            if (!mergedMap.has(sat.name)) {
-              mergedMap.set(sat.name, sat);
-            }
+            if (!mergedMap.has(sat.name)) mergedMap.set(sat.name, sat);
           });
         }
 
-        let satellites = Array.from(mergedMap.values());
-        console.log(`Merged satellite count: ${satellites.length}`);
+        let sats = Array.from(mergedMap.values());
+        console.log(`Merged satellite count: ${sats.length}`);
 
-        if (satellites.length === 0) {
+        if (sats.length === 0) {
           console.warn('Using fallback TLEs because all sources failed');
           updateProgress('space-data', 70, 'Using fallback satellite data...');
-          satellites = parseTLE(FALLBACK_TLES);
+          sats = parseTLE(FALLBACK_TLES);
         } else {
-          updateProgress('space-data', 70, `Merged ${satellites.length} satellites`);
+          updateProgress('space-data', 70, `Merged ${sats.length} satellites`);
         }
 
-        satRecords.current = satellites;
+        satRecords.current = sats;
 
-        // Step 3: Resolve names using JSON cache + N2YO (optimized batch processing)
         console.log('Step 3: Resolving satellite names...');
         updateProgress('space-data', 75, 'Resolving satellite names...');
         
         const cache = await loadCacheFromFile();
 
-        // Classification cache to avoid redundant classifySatellite calls
         const classificationCache = new Map<string, any>();
 
-        // Batch processing function for parallel resolution
-        const resolveSatelliteBatch = async (batch: typeof satellites) => {
+        const resolveSatelliteBatch = async (batch: typeof sats) => {
           return batch.map(sat => {
             if (!sat.noradId) return sat;
 
-            // Check cache first
             if (cache.satellites[sat.noradId]) {
               const cachedName = cache.satellites[sat.noradId].primaryName;
-              if (cachedName && cachedName !== sat.name) {
-                sat.name = cachedName;
-              }
+              if (cachedName && cachedName !== sat.name) sat.name = cachedName;
 
-              // Use memoized classification
               if (!classificationCache.has(sat.name)) {
                 classificationCache.set(sat.name, classifySatellite(sat.name));
               }
@@ -290,13 +269,11 @@ export default function useSpaceTraffic(options?: { onLoadingComplete?: () => vo
               return sat;
             }
 
-            // Fallback for uncached satellites
             if (/^\d+$/.test(sat.name)) {
               sat.name = `NORAD ${sat.noradId}`;
               sat.category = 'research';
               sat.system = 'Unknown';
             } else {
-              // Classify using memoized results
               if (!classificationCache.has(sat.name)) {
                 classificationCache.set(sat.name, classifySatellite(sat.name));
               }
@@ -309,27 +286,23 @@ export default function useSpaceTraffic(options?: { onLoadingComplete?: () => vo
           });
         };
 
-        // Process satellites in parallel batches of 200
         const BATCH_SIZE = 200;
-        for (let i = 0; i < satellites.length; i += BATCH_SIZE) {
-          const batch = satellites.slice(i, i + BATCH_SIZE);
+        for (let i = 0; i < sats.length; i += BATCH_SIZE) {
+          const batch = sats.slice(i, i + BATCH_SIZE);
           await resolveSatelliteBatch(batch);
           
-          // Update progress during batch processing
-          const progress = Math.min(90, 75 + Math.floor((i / satellites.length) * 15));
-          updateProgress('space-data', progress, `Resolving names (${Math.min(i + BATCH_SIZE, satellites.length)}/${satellites.length})`);
+          const progress = Math.min(90, 75 + Math.floor((i / sats.length) * 15));
+          updateProgress('space-data', progress, `Resolving names (${Math.min(i + BATCH_SIZE, sats.length)}/${sats.length})`);
         }
 
         cache.lastUpdated = new Date().toISOString();
         await saveCacheToFile(cache);
 
-        satRecords.current = satellites;
+        satRecords.current = sats;
         setIsReady(true);
 
-        // Step 4: Ready for classification and display
         console.log('Step 4: Satellites ready for classification');
-        updateProgress('space-data', 100, `Loaded ${satellites.length} satellites`);
-
+        updateProgress('space-data', 100, `Loaded ${sats.length} satellites`);
 
       } catch (e) {
         setError(`Space traffic loading error: ${e}`);
@@ -343,14 +316,12 @@ export default function useSpaceTraffic(options?: { onLoadingComplete?: () => vo
     })();
   }, []);
 
-  // Compute positions dynamically every frame (or every 1000ms to save CPU since it's a huge array)
   useEffect(() => {
     let animationFrameId: number;
     let lastTime = 0;
 
     const updatePositions = (timestamp: number) => {
-      // Throttle updates to ~15fps or less to keep the UI snappy with 8000 satellites
-      if (timestamp - lastTime > 1000) {
+      if (timestamp - lastTime > 50) {
         lastTime = timestamp;
         const now = new Date();
         const positions = satRecords.current.map(sat => {
@@ -360,7 +331,7 @@ export default function useSpaceTraffic(options?: { onLoadingComplete?: () => vo
           }
 
           const gmst = satellite.gstime(now);
-          const positionGd = satellite.eciToGeodetic(positionAndVelocity.position, gmst);
+          const positionGd = satellite.eciToGeodetic(positionAndVelocity.position as satellite.EciVec3<number>, gmst);
           const longitude = satellite.degreesLong(positionGd.longitude);
           const latitude = satellite.degreesLat(positionGd.latitude);
           const altitude = positionGd.height * 1000;
@@ -369,19 +340,12 @@ export default function useSpaceTraffic(options?: { onLoadingComplete?: () => vo
           const classification = sat.category ? { category: sat.category, system: sat.system } : classifySatellite(fullName);
           const cleanedName = shortenName(fullName, 28);
 
-          const category = classification.category;
-          const system = classification.system;
-
-          // Keep full name in log data for debugging, short name for UI label
-          const name = cleanedName;
-
-
           return {
-            id: sat.name,
+            id: sat.noradId ? `NORAD-${sat.noradId}` : sat.name,
             type: 'space',
-            category,
-            system,
-            name,
+            category: classification.category,
+            system: classification.system,
+            name: cleanedName,
             fullName: sat.name,
             coordinates: [longitude, latitude, altitude],
             track: 0
@@ -397,5 +361,5 @@ export default function useSpaceTraffic(options?: { onLoadingComplete?: () => vo
     return () => cancelAnimationFrame(animationFrameId);
   }, []);
 
-  return { satelliteData: isReady ? satelliteData : [], error };
+  return { satelliteData: isReady ? satelliteData : [], error, satRecords: satRecords.current };
 }

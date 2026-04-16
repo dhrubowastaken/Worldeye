@@ -1,3 +1,5 @@
+'use client';
+
 import React from 'react';
 import { useLoading } from './LoadingContext';
 
@@ -8,13 +10,9 @@ interface LoadingBarProps {
 export default function LoadingBar({ type = 'general' }: LoadingBarProps) {
   const { loadingStates } = useLoading();
   
-  // Filter loading states based on type
   const relevantStates = Object.values(loadingStates).filter(state => {
-    if (type === 'auth') {
-      return state.id.startsWith('auth-');
-    } else {
-      return !state.id.startsWith('auth-');
-    }
+    if (type === 'auth') return state.id.startsWith('auth-');
+    return !state.id.startsWith('auth-');
   });
 
   const visibleStates = relevantStates.filter(state => state.isVisible);

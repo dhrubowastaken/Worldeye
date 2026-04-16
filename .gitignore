@@ -1,3 +1,16 @@
+# Dependencies
+node_modules
+
+# Next.js build output
+.next
+out
+dist
+dist-ssr
+
+# Environment
+.env
+.env*.local
+
 # Logs
 logs
 *.log
@@ -6,11 +19,6 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
-
-node_modules
-dist
-dist-ssr
-*.local
 
 # Editor directories and files
 .vscode/*
@@ -22,7 +30,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-.env
 
 # Raw source data files (rebuilt using scripts/, committed data files tracked via Git LFS)
 satnogs_satellites.json
@@ -33,3 +40,15 @@ spacetrack_satcat.json
 tmp-*.js
 test_*.py
 test_*.mjs
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Vercel
+.vercel
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

@@ -1,3 +1,5 @@
+'use client';
+
 import React, { createContext, useContext, useState } from 'react';
 import type { ReactNode } from 'react';
 
@@ -29,13 +31,7 @@ export function LoadingProvider({ children }: LoadingProviderProps) {
   const showLoading = (id: string, message: string, color: string = 'bg-cyan-400') => {
     setLoadingStates(prev => ({
       ...prev,
-      [id]: {
-        id,
-        isVisible: true,
-        progress: 0,
-        message,
-        color
-      }
+      [id]: { id, isVisible: true, progress: 0, message, color }
     }));
   };
 
@@ -43,7 +39,6 @@ export function LoadingProvider({ children }: LoadingProviderProps) {
     setLoadingStates(prev => {
       const current = prev[id];
       if (!current) return prev;
-      
       return {
         ...prev,
         [id]: {
@@ -59,27 +54,14 @@ export function LoadingProvider({ children }: LoadingProviderProps) {
     setLoadingStates(prev => {
       const current = prev[id];
       if (!current) return prev;
-      
-      return {
-        ...prev,
-        [id]: {
-          ...current,
-          isVisible: false
-        }
-      };
+      return { ...prev, [id]: { ...current, isVisible: false } };
     });
   };
 
   const getLoadingState = (id: string) => loadingStates[id];
 
   return (
-    <LoadingContext.Provider value={{
-      loadingStates,
-      showLoading,
-      updateProgress,
-      hideLoading,
-      getLoadingState
-    }}>
+    <LoadingContext.Provider value={{ loadingStates, showLoading, updateProgress, hideLoading, getLoadingState }}>
       {children}
     </LoadingContext.Provider>
   );

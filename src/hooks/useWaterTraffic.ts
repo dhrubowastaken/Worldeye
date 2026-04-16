@@ -1,8 +1,8 @@
+'use client';
+
 import { useState, useEffect, useRef } from 'react';
 
-// You need to register on aisstream.io for a free API key.
-// Drop your key here or in an environment variable.
-const AISSTREAM_API_KEY = import.meta.env.VITE_AISSTREAM_API_KEY || ''; 
+const AISSTREAM_API_KEY = process.env.NEXT_PUBLIC_AISSTREAM_API_KEY || ''; 
 
 export default function useWaterTraffic(viewState: any, enableLoading: boolean = true) {
   const [ships, setShips] = useState<any[]>([]);
@@ -10,7 +10,6 @@ export default function useWaterTraffic(viewState: any, enableLoading: boolean =
   const debounceTimer = useRef<any>(null);
 
   useEffect(() => {
-    // Skip loading until space traffic is ready
     if (!enableLoading) {
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
       if (wsRef.current) {
@@ -27,14 +26,12 @@ export default function useWaterTraffic(viewState: any, enableLoading: boolean =
 
     const connectToAISStream = () => {
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        // Send a new subscription for the new bounding box
         const { latitude, longitude, zoom } = viewState;
         
-        let boxSize = 2; // rough latitude degree bounds
+        let boxSize = 2;
         if (zoom > 5) boxSize = 1;
         if (zoom > 8) boxSize = 0.5;
 
-        // Bounding box format: [[MinLatitude, MinLongitude], [MaxLatitude, MaxLongitude]]
         const subscriptionMessage = {
           APIKey: AISSTREAM_API_KEY,
           BoundingBoxes: [[[latitude - boxSize, longitude - boxSize], [latitude + boxSize, longitude + boxSize]]]
@@ -45,7 +42,7 @@ export default function useWaterTraffic(viewState: any, enableLoading: boolean =
         wsRef.current = new WebSocket("wss://stream.aisstream.io/v0/stream");
         
         wsRef.current.onopen = () => {
-          connectToAISStream(); // call recursively once open to send the bounding box
+          connectToAISStream();
         };
         
         wsRef.current.onmessage = (event) => {
@@ -57,7 +54,6 @@ export default function useWaterTraffic(viewState: any, enableLoading: boolean =
                 const newData = [...prev];
                 const existingIdx = newData.findIndex(s => s.id === aisMessage.MetaData.MMSI);
                 
-                // ShipType 35 roughly maps to military, others to civilian/commercial
                 const isMil = report.ShipType === 35 || report.ShipType === 30;
                 const category = isMil ? 'military' : 'civilian';
                 let system = 'Commercial Marine';
@@ -80,7 +76,6 @@ export default function useWaterTraffic(viewState: any, enableLoading: boolean =
                 } else {
                   newData.push(newShip);
                 }
-                // keep max 1000 ships in memory so we don't blow up browser
                 if (newData.length > 500) newData.shift();
                 return newData;
              });

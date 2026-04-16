@@ -1,6 +1,7 @@
+'use client';
+
 import { useState, useEffect, useRef } from 'react';
 
-// Use the local Vite proxy to bypass CORS
 const ADSB_API = '/api/adsb/v2';
 
 export default function useAirTraffic(viewState: any, enableLoading: boolean = true) {
@@ -9,29 +10,25 @@ export default function useAirTraffic(viewState: any, enableLoading: boolean = t
   const debounceTimer = useRef<any>(null);
 
   useEffect(() => {
-    // Skip loading until space traffic is ready
-    if (!enableLoading) {
+    if (!enableLoading || viewState.zoom < 4.5) {
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
+      setFlights([]);
       return;
     }
 
     const fetchFlights = async () => {
       const now = Date.now();
-      // Rate limit to once every 5 seconds per viewport change
       if (now - lastFetch.current < 5000) return;
       
-      const { latitude, longitude, zoom } = viewState;
+      const { latitude, longitude } = viewState;
       
-      // Calculate a rough radius based on zoom. 
-      // max API radius is 250nm (approx 460km).
-      let radiusRadiusNm = 250;
-      if (zoom > 5) radiusRadiusNm = 100;
-      if (zoom > 8) radiusRadiusNm = 50;
+      // Always fetch maximum 250NM radius to fill the viewport homogeneously
+      const radiusNm = 250;
 
       lastFetch.current = now;
 
       try {
-        const response = await fetch(`${ADSB_API}/lat/${latitude.toFixed(3)}/lon/${longitude.toFixed(3)}/dist/${radiusRadiusNm}`);
+        const response = await fetch(`${ADSB_API}/lat/${latitude.toFixed(3)}/lon/${longitude.toFixed(3)}/dist/${radiusNm}`);
         if (!response.ok) return;
         const data = await response.json();
         
@@ -57,15 +54,49 @@ export default function useAirTraffic(viewState: any, enableLoading: boolean = t
         }
       } catch (err) {
         console.error("Failed to fetch air traffic", err);
+        setFlights([]);
       }
     };
 
-    // Debounce the fetch so we don't spam while the user is actively dragging the globe map
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
     debounceTimer.current = setTimeout(fetchFlights, 1000);
 
     return () => clearTimeout(debounceTimer.current);
   }, [viewState, enableLoading]);
+
+  // Dead reckoning animation loop for smooth path projection
+  useEffect(() => {
+    if (!enableLoading) return;
+    let animationFrameId: number;
+    let lastTime = Date.now();
+
+    const animateFlights = () => {
+      const now = Date.now();
+      const dt = (now - lastTime) / 1000;
+      lastTime = now;
+
+      setFlights(prev => {
+        if (!prev || prev.length === 0) return prev;
+        
+        return prev.map(ac => {
+          if (!ac.velocity || !ac.track) return ac;
+          const speedMpS = ac.velocity * 0.514444; // knots to m/this
+          if (speedMpS <= 0) return ac;
+
+          const headingRad = ac.track * (Math.PI / 180);
+          // Latitude approximation
+          const dx = (speedMpS * Math.sin(headingRad) * dt) / (111320 * Math.cos(ac.coordinates[1] * Math.PI / 180));
+          const dy = (speedMpS * Math.cos(headingRad) * dt) / 111320;
+          
+          return { ...ac, coordinates: [ac.coordinates[0] + dx, ac.coordinates[1] + dy, ac.coordinates[2]] };
+        });
+      });
+      animationFrameId = requestAnimationFrame(animateFlights);
+    };
+    
+    animationFrameId = requestAnimationFrame(animateFlights);
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [enableLoading]);
 
   return flights;
 }
