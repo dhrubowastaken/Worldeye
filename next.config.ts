@@ -6,6 +6,7 @@ const nextConfig: NextConfig = {
   experimental: {
     webpackBuildWorker: false,
   },
+  transpilePackages: ['satellite.js'],
   turbopack: {
     root: path.resolve(__dirname),
   },
