@@ -1,32 +1,31 @@
-import { normalizeAisMessage } from '@/features/traffic/providers/waterProvider';
+import { createWaterProvider, normalizeAisMessage } from '@/features/traffic/providers/waterProvider';
+import type { ViewportQuery } from '@/features/traffic/types';
 
-describe('normalizeAisMessage', () => {
-  test('maps cargo traffic to a civilian sea entity', () => {
-    const entity = normalizeAisMessage({
-      MessageType: 'PositionReport',
-      MetaData: {
-        MMSI: '123456789',
-        ShipName: 'PACIFIC TRADER',
-      },
-      Message: {
-        PositionReport: {
-          Longitude: 120.3,
-          Latitude: 14.6,
-          Sog: 16,
-          TrueHeading: 75,
-          ShipType: 72,
-        },
+const query: ViewportQuery = {
+  center: [0, 0],
+  zoom: 4,
+  pitch: 0,
+  detail: 'medium',
+  key: 'test',
+  bounds: { north: 1, south: -1, east: 1, west: -1 },
+  visibleLayerKinds: ['earth'],
+};
+
+describe('waterProvider no-key fallback', () => {
+  test('does not require AIS credentials or retain vessel snapshots', async () => {
+    const provider = createWaterProvider();
+
+    await expect(provider.fetchSnapshot(query)).resolves.toMatchObject({
+      entities: [],
+      health: {
+        providerId: 'water-provider',
+        status: 'unsupported_region',
+        retryable: false,
       },
     });
+  });
 
-    expect(entity).toMatchObject({
-      id: '123456789',
-      kind: 'water',
-      label: 'PACIFIC TRADER',
-      classification: {
-        category: 'civilian',
-        system: 'Cargo',
-      },
-    });
+  test('keeps the legacy AIS normalizer inert until a verified no-key source exists', () => {
+    expect(normalizeAisMessage()).toBeNull();
   });
 });

@@ -25,21 +25,12 @@ Open `http://localhost:3000`.
 
 ## Environment
 
-Copy `.env.example` to `.env.local` and fill in whichever providers you want to enable:
+No environment variables are required for the standard app. World Eye boots from
+no-key live sources and reports provider degradation through structured health
+states when an upstream source is unavailable.
 
-```bash
-NEXT_PUBLIC_AISSTREAM_API_KEY=
-NEXT_PUBLIC_SPACE_TRACK_USERNAME=
-NEXT_PUBLIC_SPACE_TRACK_PASSWORD=
-NEXT_PUBLIC_N2YO_API_KEY=
-```
-
-Notes:
-
-- Air traffic works through the ADS-B proxy rewrite configured in `next.config.ts`.
-- Maritime traffic requires `NEXT_PUBLIC_AISSTREAM_API_KEY`.
-- Orbital tracking works with public CelesTrak feeds out of the box and uses the
-  committed satellite name cache in `public/data/satellite-names.json`.
+Create `.env.local` only for local provider experiments; the default development
+workflow does not require any secrets or copied configuration.
 
 ## Engineering workflow
 
@@ -62,8 +53,7 @@ src/
   features/globe/           Map styling, viewport math, scheduler, rendering
   features/traffic/         Provider contracts, classification, scene store
   features/world-eye/       Product shell, panels, controller hook
-public/data/                Committed runtime catalogs served directly to the client
-scripts/                    Optional catalog refresh utilities
+scripts/                    Legacy data utilities outside the no-key runtime path
 tests/
   unit/                     Domain and provider tests
   components/               UI surface tests
@@ -108,17 +98,12 @@ Providers and entities request overlays through `RenderIntent` contracts like:
 
 That gives future datapoints a stable way to ask for rendering without editing the core map component.
 
-## Optional data maintenance
+## Data sourcing
 
-The app already ships with committed runtime data, so extra setup is not required.
-
-If you want to rebuild the orbital name catalog:
-
-```bash
-npm run build:satellites
-```
-
-The refresh scripts write only to `public/data/`.
+World Eye is designed to run from live, no-key provider feeds. Historical catalog
+artifacts may remain in the repo during the rebuild, but they are not required
+for setup, are not refreshed by an npm script, and are not part of the runtime
+boot path.
 
 ## CI
 
@@ -150,6 +135,6 @@ The workflow lives in `.github/workflows/ci.yml`.
 
 ## Current tradeoffs
 
-- The orbital provider intentionally caps the loaded live catalog to keep client-side propagation responsive.
-- Maritime traffic is degraded when AIS credentials are missing, but the rest of the app remains usable.
+- The orbital provider intentionally caps loaded live-source records to keep client-side propagation responsive.
+- Provider outages degrade only the affected layer, while the rest of the app remains usable.
 - Playwright smoke tests mock provider traffic so CI verifies the product shell deterministically.

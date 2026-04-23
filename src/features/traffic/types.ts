@@ -1,6 +1,26 @@
-export type EntityKind = 'air' | 'water' | 'space';
+export type EntityKind =
+  | 'air'
+  | 'space'
+  | 'earth'
+  | 'weather'
+  | 'disaster'
+  | 'space-weather'
+  | 'media'
+  | 'imagery';
 
-export type EntityCategory = 'civilian' | 'military' | 'research';
+export type EntityCategory =
+  | 'civilian'
+  | 'military'
+  | 'research'
+  | 'environment'
+  | 'hazard'
+  | 'weather'
+  | 'disaster'
+  | 'media'
+  | 'space-weather'
+  | 'imagery';
+
+export type EntitySeverity = 'info' | 'low' | 'moderate' | 'high' | 'critical';
 
 export type OverlayType = 'marker' | 'label' | 'orbit' | 'trail' | (string & {});
 
@@ -14,8 +34,13 @@ export interface GlobeViewState {
 
 export interface LayerVisibility {
   air: boolean;
-  water: boolean;
   space: boolean;
+  earth: boolean;
+  weather: boolean;
+  disaster: boolean;
+  'space-weather': boolean;
+  media: boolean;
+  imagery: boolean;
 }
 
 export interface ViewportBounds {
@@ -54,6 +79,8 @@ export interface EntityFreshness {
 export interface EntityMetrics {
   heading: number;
   speed: number;
+  value?: number;
+  unit?: string;
 }
 
 export interface RenderableConfig {
@@ -67,11 +94,17 @@ export interface TrackedEntity {
   kind: EntityKind;
   label: string;
   classification: EntityClassification;
+  severity?: EntitySeverity;
   coordinates: EntityCoordinates;
   freshness: EntityFreshness;
   providerId: string;
+  sourceId?: string;
+  observedAt?: string;
+  updatedAt?: string;
+  confidence?: number;
   metrics: EntityMetrics;
   metadata: Record<string, unknown>;
+  links?: Array<{ label: string; url: string }>;
   renderables?: RenderableConfig[];
 }
 
@@ -91,7 +124,16 @@ export interface RenderIntent {
 
 export interface ProviderHealth {
   providerId: string;
-  status: 'idle' | 'loading' | 'ready' | 'degraded' | 'error';
+  status:
+    | 'idle'
+    | 'loading'
+    | 'ready'
+    | 'degraded'
+    | 'rate_limited'
+    | 'timeout'
+    | 'unsupported_region'
+    | 'offline'
+    | 'error';
   summary: string;
   updatedAt: string;
   retryable: boolean;

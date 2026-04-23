@@ -47,6 +47,10 @@ export function classifySatellite(fullName: string): EntityClassification {
     return { category: 'research', system: 'Science/Gov' };
   }
 
+  if (SATELLITE_CLASSIFICATION.fallbackRegex.militaryUsa.test(normalized)) {
+    return { category: 'military', system: 'Defense/USA' };
+  }
+
   if (SATELLITE_CLASSIFICATION.fallbackRegex.military.test(normalized)) {
     return { category: 'military', system: 'Defense' };
   }

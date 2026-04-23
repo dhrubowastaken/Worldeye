@@ -4,7 +4,7 @@ describe('classifySatellite', () => {
   test('maps known commercial constellations to civilian systems', () => {
     expect(classifySatellite('STARLINK-1234')).toEqual({
       category: 'civilian',
-      system: 'SpaceX',
+      system: 'SpaceX Starlink',
     });
   });
 

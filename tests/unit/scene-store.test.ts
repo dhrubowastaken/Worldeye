@@ -37,12 +37,21 @@ describe('SceneStore', () => {
     const visible = store.getVisibleEntities(
       buildViewportQuery(
         { longitude: 10, latitude: 20, zoom: 5, pitch: 30, bearing: 0 },
-        { air: true, water: true, space: true },
+        {
+          air: true,
+          space: true,
+          earth: true,
+          weather: true,
+          disaster: true,
+          'space-weather': true,
+          media: true,
+          imagery: true,
+        },
       ),
     );
 
-    expect(visible.map((entity) => entity.id)).toEqual(['air-1']);
-    expect(store.getCounts()).toEqual({ air: 1, water: 0, space: 1 });
+    expect(visible.map((entity) => entity.id)).toEqual(['air-1', 'space-1']);
+    expect(store.getCounts()).toEqual({ air: 1, space: 1 });
   });
 
   test('replaces one provider without wiping unrelated providers', () => {

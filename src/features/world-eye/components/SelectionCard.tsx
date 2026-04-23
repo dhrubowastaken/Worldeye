@@ -6,23 +6,6 @@ interface SelectionCardProps {
   onClearSelection: () => void;
 }
 
-function renderEntity(entity: TrackedEntity) {
-  return (
-    <>
-      <p className="text-[11px] uppercase tracking-[0.24em] text-cyan-200/75">
-        {entity.kind} • {entity.classification.system}
-      </p>
-      <h3 className="mt-2 text-xl font-semibold text-white">{entity.label}</h3>
-      <div className="mt-3 grid grid-cols-2 gap-3 text-sm text-slate-300">
-        <p>Lat {entity.coordinates.latitude.toFixed(2)}</p>
-        <p>Lon {entity.coordinates.longitude.toFixed(2)}</p>
-        <p>Alt {Math.round(entity.coordinates.altitude).toLocaleString()} m</p>
-        <p>Spd {Math.round(entity.metrics.speed).toLocaleString()}</p>
-      </div>
-    </>
-  );
-}
-
 export function SelectionCard({
   selectedEntity,
   hoveredEntity,
@@ -30,27 +13,115 @@ export function SelectionCard({
 }: SelectionCardProps) {
   const entity = selectedEntity ?? hoveredEntity;
 
-  if (!entity) {
-    return (
-      <div className="pointer-events-auto w-full max-w-[420px] rounded-[28px] border border-white/10 bg-slate-950/70 px-5 py-4 text-sm text-slate-300 shadow-[0_20px_60px_rgba(2,6,23,0.4)] backdrop-blur-xl">
-        Hover or select a target to inspect classification, location, and refresh
-        status without leaving the map.
-      </div>
-    );
-  }
+  if (!entity) return null;
 
   return (
-    <div className="pointer-events-auto w-full max-w-[420px] rounded-[28px] border border-white/10 bg-slate-950/80 px-5 py-4 shadow-[0_20px_60px_rgba(2,6,23,0.45)] backdrop-blur-xl">
-      {renderEntity(entity)}
-      {selectedEntity ? (
+    <div
+      style={{
+        position: 'fixed',
+        bottom: '28px',
+        left: '28px',
+        zIndex: 25,
+        width: '100%',
+        maxWidth: '360px',
+        borderRadius: '8px',
+        background: 'var(--we-surface)',
+        border: '1px solid var(--we-surface-border)',
+        backdropFilter: 'var(--we-glass-blur)',
+        WebkitBackdropFilter: 'var(--we-glass-blur)',
+        padding: '16px 20px',
+        pointerEvents: 'auto',
+      }}
+    >
+      {selectedEntity && (
         <button
           type="button"
+          aria-label="Clear selection"
           onClick={onClearSelection}
-          className="mt-4 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] text-white transition hover:border-cyan-300/60 hover:bg-cyan-200/10"
+          className="icon-btn"
+          style={{
+            position: 'absolute',
+            top: '12px',
+            right: '12px',
+            width: '28px',
+            height: '28px',
+            borderRadius: '50%',
+            border: 'none',
+            background: 'var(--we-surface-hover)',
+            color: 'var(--we-text-secondary)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '14px',
+          }}
         >
-          Clear Selection
+          x
         </button>
-      ) : null}
+      )}
+
+      <p
+        style={{
+          fontFamily: 'var(--font-body)',
+          fontSize: '10px',
+          fontWeight: 600,
+          textTransform: 'uppercase',
+          letterSpacing: '0.18em',
+          color: 'var(--we-text-tertiary)',
+        }}
+      >
+        {entity.kind} · {entity.classification.category}
+      </p>
+
+      <h3
+        style={{
+          fontFamily: 'var(--font-display)',
+          fontSize: '17px',
+          fontWeight: 600,
+          color: 'var(--we-text)',
+          marginTop: '6px',
+          letterSpacing: '0',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          paddingRight: selectedEntity ? '32px' : '0',
+        }}
+      >
+        {entity.label}
+      </h3>
+
+      <div
+        style={{
+          marginTop: '12px',
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: '6px 16px',
+        }}
+      >
+        {[
+          { label: 'Lat', value: entity.coordinates.latitude.toFixed(2) },
+          { label: 'Lon', value: entity.coordinates.longitude.toFixed(2) },
+          { label: 'Alt', value: `${Math.round(entity.coordinates.altitude).toLocaleString()} m` },
+          { label: 'Spd', value: Math.round(entity.metrics.speed).toLocaleString() },
+          { label: 'Src', value: entity.sourceId ?? entity.providerId },
+          { label: 'Risk', value: entity.severity ?? 'info' },
+        ].map((stat) => (
+          <p
+            key={stat.label}
+            style={{
+              fontFamily: 'var(--font-body)',
+              fontSize: '12px',
+              fontWeight: 400,
+              color: 'var(--we-text-secondary)',
+            }}
+          >
+            <span style={{ color: 'var(--we-text-tertiary)', marginRight: '4px' }}>
+              {stat.label}
+            </span>
+            {stat.value}
+          </p>
+        ))}
+      </div>
     </div>
   );
 }

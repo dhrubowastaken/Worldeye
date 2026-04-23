@@ -1,5 +1,6 @@
 import { buildViewportQuery } from '@/features/globe/lib/viewport';
 import { buildRenderIntents, getVisibleRenderIntents } from '@/features/traffic/render/renderIntents';
+import { ALL_VISIBLE_LAYERS } from '../helpers/layerVisibility';
 import type { TrackedEntity } from '@/features/traffic/types';
 
 const trackedEntity: TrackedEntity = {
@@ -31,7 +32,7 @@ describe('getVisibleRenderIntents', () => {
       intents,
       buildViewportQuery(
         { longitude: 5, latitude: 5, zoom: 6, pitch: 35, bearing: 0 },
-        { air: true, water: true, space: true },
+        ALL_VISIBLE_LAYERS,
       ),
       null,
     );

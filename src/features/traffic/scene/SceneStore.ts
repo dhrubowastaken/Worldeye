@@ -56,11 +56,11 @@ export class SceneStore {
     return this.entities.get(entityId);
   }
 
-  getCounts(): Record<'air' | 'water' | 'space', number> {
-    const counts = { air: 0, water: 0, space: 0 };
+  getCounts(): Record<string, number> {
+    const counts: Record<string, number> = {};
 
     this.entities.forEach((entity) => {
-      counts[entity.kind] += 1;
+      counts[entity.kind] = (counts[entity.kind] ?? 0) + 1;
     });
 
     return counts;
@@ -77,6 +77,14 @@ export class SceneStore {
         }
 
         if (!query.visibleLayerKinds.includes(entity.kind)) {
+          return;
+        }
+
+        // Space markers need to stay globally visible on the globe.
+        // A tight rectangular viewport clip causes most of the active catalog
+        // to disappear at low zoom even though the globe can render them.
+        if (entity.kind === 'space') {
+          visibleIds.add(entityId);
           return;
         }
 

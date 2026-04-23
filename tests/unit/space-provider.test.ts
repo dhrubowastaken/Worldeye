@@ -10,8 +10,16 @@ describe('parseTleCatalog', () => {
     expect(records).toHaveLength(1);
     expect(records[0]).toMatchObject({
       name: 'ISS (ZARYA)',
-      noradId: '25544',
+      catalogId: '25544',
     });
+  });
+
+  test('skips incomplete TLE records instead of fabricating entities', () => {
+    expect(
+      parseTleCatalog(`BROKEN SAT
+1 99999U 98067A   23060.52302325  .00016717  00000-0  30164-3 0  9995
+`),
+    ).toEqual([]);
   });
 });
 
@@ -26,11 +34,12 @@ describe('toSpaceEntity', () => {
     });
 
     expect(entity).toMatchObject({
-      id: 'NORAD-1234',
+      id: 'NORAD-01234',
       kind: 'space',
+      sourceId: 'space.celestrak',
       classification: {
         category: 'civilian',
-        system: 'SpaceX',
+        system: 'SpaceX Starlink',
       },
     });
   });

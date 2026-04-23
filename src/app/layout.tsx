@@ -4,7 +4,7 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'World Eye',
-  description: 'A modular, live intelligence globe for air, maritime, and orbital tracking.',
+  description: 'Live global intelligence — air, maritime, and orbital tracking on an interactive globe.',
 };
 
 export default function RootLayout({

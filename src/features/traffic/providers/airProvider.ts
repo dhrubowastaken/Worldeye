@@ -103,6 +103,7 @@ export function createAirProvider(
       signal?: AbortSignal,
     ): Promise<ProviderFetchResult<TrackedEntity>> {
       if (query.zoom < 3.8) {
+        // Report as READY (not loading) so the loading screen doesn't block on this.
         return {
           entities: [],
           health: buildHealth('Zoom in to load live aircraft'),
@@ -111,27 +112,41 @@ export function createAirProvider(
 
       const [longitude, latitude] = query.center;
       const radiusNm = resolveRadiusNm(query);
-      const response = await fetcher(
-        `${ADSB_API}/lat/${latitude.toFixed(3)}/lon/${longitude.toFixed(3)}/dist/${radiusNm}`,
-        { signal },
-      );
 
-      if (!response.ok) {
+      try {
+        // Race with a 6-second timeout.
+        const response = await Promise.race([
+          fetcher(
+            `${ADSB_API}/lat/${latitude.toFixed(3)}/lon/${longitude.toFixed(3)}/dist/${radiusNm}`,
+            { signal },
+          ),
+          new Promise<Response>((_, reject) =>
+            setTimeout(() => reject(new Error('ADS-B fetch timeout')), 6000),
+          ),
+        ]);
+
+        if (!response.ok) {
+          return {
+            entities: [],
+            health: buildHealth('ADS-B provider unavailable', 'degraded'),
+          };
+        }
+
+        const payload = (await response.json()) as RawAircraftResponse;
+        const entities = (payload.ac ?? [])
+          .map(normalizeAircraft)
+          .filter((entity): entity is TrackedEntity => Boolean(entity));
+
+        return {
+          entities,
+          health: buildHealth(`Tracking ${entities.length} aircraft`),
+        };
+      } catch {
         return {
           entities: [],
-          health: buildHealth('ADS-B provider unavailable', 'degraded'),
+          health: buildHealth('ADS-B request timed out', 'degraded'),
         };
       }
-
-      const payload = (await response.json()) as RawAircraftResponse;
-      const entities = (payload.ac ?? [])
-        .map(normalizeAircraft)
-        .filter((entity): entity is TrackedEntity => Boolean(entity));
-
-      return {
-        entities,
-        health: buildHealth(`Tracking ${entities.length} aircraft`),
-      };
     },
     teardown() {
       return undefined;

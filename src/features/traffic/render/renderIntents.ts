@@ -8,6 +8,10 @@ const OVERLAY_ORDER: Record<string, number> = {
 };
 
 function matchesViewport(query: ViewportQuery, intent: RenderIntent): boolean {
+  if (intent.payload.kind === 'space') {
+    return true;
+  }
+
   const { longitude, latitude } = intent.anchor;
   const { east, north, south, west } = query.bounds;
 

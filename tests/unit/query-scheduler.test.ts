@@ -1,12 +1,13 @@
 import { ViewportQueryScheduler } from '@/features/globe/lib/ViewportQueryScheduler';
 import { buildViewportQuery } from '@/features/globe/lib/viewport';
+import { ALL_VISIBLE_LAYERS, NO_EARTH_LAYERS } from '../helpers/layerVisibility';
 
 describe('ViewportQueryScheduler', () => {
   test('requires an initial fetch when no query has been executed yet', () => {
     const scheduler = new ViewportQueryScheduler();
     const query = buildViewportQuery(
       { longitude: 0, latitude: 0, zoom: 4, pitch: 30, bearing: 0 },
-      { air: true, water: true, space: true },
+      ALL_VISIBLE_LAYERS,
     );
 
     expect(scheduler.shouldFetch(query, 0)).toBe(true);
@@ -16,14 +17,14 @@ describe('ViewportQueryScheduler', () => {
     const scheduler = new ViewportQueryScheduler();
     const query = buildViewportQuery(
       { longitude: 0, latitude: 0, zoom: 4, pitch: 30, bearing: 0 },
-      { air: true, water: true, space: true },
+      ALL_VISIBLE_LAYERS,
     );
 
     scheduler.markFetched(query, 0);
 
     const tinyChange = buildViewportQuery(
       { longitude: 0.08, latitude: 0.06, zoom: 4.01, pitch: 30, bearing: 0 },
-      { air: true, water: true, space: true },
+      ALL_VISIBLE_LAYERS,
     );
 
     expect(scheduler.shouldFetch(tinyChange, 15000)).toBe(false);
@@ -34,14 +35,14 @@ describe('ViewportQueryScheduler', () => {
     const scheduler = new ViewportQueryScheduler();
     const initialQuery = buildViewportQuery(
       { longitude: 0, latitude: 0, zoom: 4, pitch: 30, bearing: 0 },
-      { air: true, water: true, space: true },
+      ALL_VISIBLE_LAYERS,
     );
 
     scheduler.markFetched(initialQuery, 0);
 
     const changedQuery = buildViewportQuery(
       { longitude: 0, latitude: 0, zoom: 7, pitch: 30, bearing: 0 },
-      { air: true, water: false, space: true },
+      NO_EARTH_LAYERS,
     );
 
     expect(scheduler.shouldFetch(changedQuery, 5000)).toBe(true);

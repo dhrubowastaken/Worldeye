@@ -8,16 +8,20 @@ import type { MapLayerMouseEvent, ViewStateChangeEvent } from 'react-map-gl/mapl
 import 'maplibre-gl/dist/maplibre-gl.css';
 
 import { CATEGORY_HEX, getIconSvg } from '@/features/globe/lib/icons';
-import { MAP_STYLE } from '@/features/globe/lib/mapStyle';
+import { buildMapStyle, type MapStyleId } from '@/features/globe/lib/mapStyle';
 import type { GlobeViewState, RenderIntent, TrackedEntity } from '@/features/traffic/types';
 
 interface WorldMapProps {
   entities: TrackedEntity[];
+  inspectMode: boolean;
   orbitPath: Array<[number, number]>;
   renderIntents: RenderIntent[];
   selectedEntityId: string | null;
   viewState: GlobeViewState;
+  mapStyleId: MapStyleId;
+  mapQuality: number;
   onHoverEntity: (entityId: string | null) => void;
+  onInspectLocation: (coordinate: [number, number]) => void;
   onSelectEntity: (entityId: string | null) => void;
   onViewStateChange: (viewState: GlobeViewState) => void;
 }
@@ -44,7 +48,7 @@ function toFeature(entity: TrackedEntity): EntityFeature {
       id: entity.id,
       icon: entity.kind === 'space' ? undefined : `${entity.kind}-${entity.classification.category}`,
       rotation: entity.metrics.heading,
-      color: CATEGORY_HEX[entity.classification.category] ?? '#dbeafe',
+      color: CATEGORY_HEX[entity.classification.category] ?? '#F5F5F7',
       label: entity.label,
     },
   };
@@ -52,38 +56,44 @@ function toFeature(entity: TrackedEntity): EntityFeature {
 
 function buildFeatureCollections(entities: TrackedEntity[]) {
   const air: EntityFeature[] = [];
-  const water: EntityFeature[] = [];
   const space: EntityFeature[] = [];
+  const events: EntityFeature[] = [];
 
   entities.forEach((entity) => {
     const feature = toFeature(entity);
     if (entity.kind === 'air') {
       air.push(feature);
-    } else if (entity.kind === 'water') {
-      water.push(feature);
-    } else {
+    } else if (entity.kind === 'space') {
       space.push(feature);
+    } else {
+      events.push(feature);
     }
   });
 
   return {
     air: { type: 'FeatureCollection', features: air } satisfies FeatureCollection<Point>,
-    water: { type: 'FeatureCollection', features: water } satisfies FeatureCollection<Point>,
     space: { type: 'FeatureCollection', features: space } satisfies FeatureCollection<Point>,
+    events: { type: 'FeatureCollection', features: events } satisfies FeatureCollection<Point>,
   };
 }
 
 export function WorldMap({
   entities,
+  inspectMode,
   orbitPath,
   renderIntents,
   selectedEntityId,
   viewState,
+  mapStyleId,
+  mapQuality,
   onHoverEntity,
+  onInspectLocation,
   onSelectEntity,
   onViewStateChange,
 }: WorldMapProps) {
   const featureCollections = useMemo(() => buildFeatureCollections(entities), [entities]);
+
+  const mapStyle = useMemo(() => buildMapStyle(mapStyleId, mapQuality), [mapStyleId, mapQuality]);
 
   const labelCollection = useMemo(
     () =>
@@ -128,13 +138,10 @@ export function WorldMap({
 
   const onMapLoad = useCallback((event: { target: maplibregl.Map }) => {
     const map = event.target;
-    const icons: Array<{ id: string; category: string; type: 'air' | 'water'; width: number }> = [
+    const icons: Array<{ id: string; category: string; type: 'air'; width: number }> = [
       { id: 'air-civilian', category: 'civilian', type: 'air', width: 64 },
       { id: 'air-military', category: 'military', type: 'air', width: 64 },
       { id: 'air-research', category: 'research', type: 'air', width: 64 },
-      { id: 'water-civilian', category: 'civilian', type: 'water', width: 48 },
-      { id: 'water-military', category: 'military', type: 'water', width: 48 },
-      { id: 'water-research', category: 'research', type: 'water', width: 48 },
     ];
 
     icons.forEach((icon) => {
@@ -161,17 +168,23 @@ export function WorldMap({
   );
 
   return (
-    <div className="absolute inset-0 overflow-hidden rounded-[32px] border border-white/10">
+    <div style={{ position: 'fixed', inset: 0, zIndex: 0 }}>
       <Map
+        key={`${mapStyleId}-${mapQuality}`}
         {...viewState}
         attributionControl={false}
-        interactiveLayerIds={['space-points', 'air-symbols', 'water-symbols']}
+        interactiveLayerIds={['space-points', 'event-points', 'air-symbols']}
         mapLib={maplibregl}
-        mapStyle={MAP_STYLE}
+        mapStyle={mapStyle}
         maxPitch={85}
         maxZoom={18}
         minZoom={1.5}
         onClick={(event) => {
+          if (inspectMode) {
+            onInspectLocation([event.lngLat.lng, event.lngLat.lat]);
+            return;
+          }
+
           const feature = event.features?.[0];
           onSelectEntity(typeof feature?.properties?.id === 'string' ? feature.properties.id : null);
         }}
@@ -182,13 +195,25 @@ export function WorldMap({
         style={{ width: '100%', height: '100%' }}
       >
         <Source id="space-points-source" type="geojson" data={featureCollections.space}>
+          {/* Outer glow ring for visibility */}
+          <Layer
+            id="space-glow"
+            type="circle"
+            paint={{
+              'circle-radius': ['interpolate', ['linear'], ['zoom'], 0, 3.5, 3, 4, 6, 6, 10, 10],
+              'circle-color': ['get', 'color'],
+              'circle-opacity': ['interpolate', ['linear'], ['zoom'], 0, 0.08, 4, 0.12, 8, 0.15],
+              'circle-blur': 1,
+            }}
+          />
+          {/* Core satellite dot */}
           <Layer
             id="space-points"
             type="circle"
             paint={{
-              'circle-radius': ['interpolate', ['linear'], ['zoom'], 2, 1.3, 6, 2.8, 10, 5.5],
+              'circle-radius': ['interpolate', ['linear'], ['zoom'], 0, 1.2, 3, 1.8, 6, 3.5, 10, 6],
               'circle-color': ['get', 'color'],
-              'circle-opacity': 0.85,
+              'circle-opacity': ['interpolate', ['linear'], ['zoom'], 0, 0.7, 4, 0.8, 8, 0.92],
               'circle-stroke-color': [
                 'case',
                 ['==', ['get', 'id'], selectedEntityId ?? ''],
@@ -199,7 +224,7 @@ export function WorldMap({
                 'case',
                 ['==', ['get', 'id'], selectedEntityId ?? ''],
                 2,
-                0.6,
+                0.4,
               ],
             }}
           />
@@ -220,16 +245,27 @@ export function WorldMap({
           />
         </Source>
 
-        <Source id="water-symbol-source" type="geojson" data={featureCollections.water}>
+        <Source id="event-point-source" type="geojson" data={featureCollections.events}>
           <Layer
-            id="water-symbols"
-            type="symbol"
-            layout={{
-              'icon-image': ['get', 'icon'],
-              'icon-size': 0.34,
-              'icon-allow-overlap': true,
-              'icon-rotate': ['get', 'rotation'],
-              'icon-rotation-alignment': 'map',
+            id="event-points"
+            type="circle"
+            paint={{
+              'circle-radius': ['interpolate', ['linear'], ['zoom'], 1, 4, 4, 5, 7, 8],
+              'circle-color': ['get', 'color'],
+              'circle-opacity': 0.88,
+              'circle-stroke-color': '#ffffff',
+              'circle-stroke-opacity': [
+                'case',
+                ['==', ['get', 'id'], selectedEntityId ?? ''],
+                0.95,
+                0.32,
+              ],
+              'circle-stroke-width': [
+                'case',
+                ['==', ['get', 'id'], selectedEntityId ?? ''],
+                2,
+                1,
+              ],
             }}
           />
         </Source>
@@ -257,7 +293,7 @@ export function WorldMap({
             id="orbit-line"
             type="line"
             paint={{
-              'line-color': '#facc15',
+              'line-color': '#FBBF24',
               'line-width': 2,
               'line-opacity': 0.7,
               'line-dasharray': [3, 3],
@@ -265,7 +301,6 @@ export function WorldMap({
           />
         </Source>
       </Map>
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(13,148,136,0.1),_transparent_32%),radial-gradient(circle_at_bottom,_rgba(14,165,233,0.16),_transparent_38%)]" />
     </div>
   );
 }

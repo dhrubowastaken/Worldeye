@@ -41,4 +41,13 @@ describe('normalizeAircraft', () => {
     expect(entity?.classification.category).toBe('military');
     expect(entity?.classification.system).toBe('Defense Air');
   });
+
+  test('drops aircraft records that cannot be placed on the globe', () => {
+    expect(
+      normalizeAircraft({
+        hex: 'no-position',
+        flight: 'DAL123',
+      }),
+    ).toBeNull();
+  });
 });

@@ -1,36 +1,14 @@
-# Data Refresh Scripts
+# Scripts
 
-These scripts are optional maintenance tools for rebuilding the committed orbital
-name catalog in `public/data/`. The app works after a normal clone and install;
-you only need these when you want to refresh or enrich the shipped catalog.
+The no-key rebuild no longer ships cache-building or data-merge scripts for
+provider data. Runtime source data is fetched live, normalized in application
+code, and kept only in memory for the current session.
 
-## Runtime Output
+Do not add scripts that:
 
-- `public/data/satellite-names.json`
+- rebuild committed provider data under `public/data`
+- enrich source payloads with credentialed or downloaded side files
+- write live source snapshots into local files for app startup
 
-## Scripts
-
-### `node scripts/build-satellite-names.cjs`
-
-Builds the initial cache from public CelesTrak feeds.
-
-### `node scripts/merge-satnogs-data.cjs`
-
-Merges a downloaded SatNOGS dataset into the existing cache.
-
-### `node scripts/merge-spacetrack-data.cjs`
-
-Merges a downloaded Space-Track SATCAT export into the existing cache.
-
-## One-shot rebuild
-
-```bash
-npm run build:satellites
-```
-
-## Notes
-
-- The project no longer relies on Git LFS. The runtime catalog is committed
-  directly so `git clone` is enough to boot the app.
-- Classification logic now lives in typed source under `src/features/traffic/`
-  rather than a duplicate public JSON file.
+If a source needs preprocessing, keep it ephemeral and testable inside the
+typed source/runtime modules under `src/features/sources`.

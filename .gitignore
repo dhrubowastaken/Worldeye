@@ -36,11 +36,13 @@ lerna-debug.log*
 satnogs_satellites.json
 spacetrack_full_satcat.json
 spacetrack_satcat.json
+public/data/satellite-names.json
 
 # Temporary files
 tmp-*.js
 test_*.py
 test_*.mjs
+test-results/
 
 # TypeScript
 *.tsbuildinfo

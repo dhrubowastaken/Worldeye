@@ -2,6 +2,11 @@ import {
   buildViewportQuery,
   hasMeaningfulViewportChange,
 } from '@/features/globe/lib/viewport';
+import {
+  AIR_AND_SPACE_ONLY,
+  ALL_VISIBLE_LAYERS,
+  NO_EARTH_LAYERS,
+} from '../helpers/layerVisibility';
 
 describe('buildViewportQuery', () => {
   test('builds bounds and visible layer metadata from the active view', () => {
@@ -14,9 +19,7 @@ describe('buildViewportQuery', () => {
         bearing: -10,
       },
       {
-        air: true,
-        water: false,
-        space: true,
+        ...AIR_AND_SPACE_ONLY,
       },
     );
 
@@ -39,7 +42,7 @@ describe('hasMeaningfulViewportChange', () => {
         pitch: 30,
         bearing: 0,
       },
-      { air: true, water: true, space: true },
+      ALL_VISIBLE_LAYERS,
     );
 
     const next = buildViewportQuery(
@@ -50,7 +53,7 @@ describe('hasMeaningfulViewportChange', () => {
         pitch: 31,
         bearing: 1,
       },
-      { air: true, water: true, space: true },
+      ALL_VISIBLE_LAYERS,
     );
 
     expect(hasMeaningfulViewportChange(previous, next)).toBe(false);
@@ -65,7 +68,7 @@ describe('hasMeaningfulViewportChange', () => {
         pitch: 30,
         bearing: 0,
       },
-      { air: true, water: true, space: true },
+      ALL_VISIBLE_LAYERS,
     );
 
     const next = buildViewportQuery(
@@ -76,7 +79,7 @@ describe('hasMeaningfulViewportChange', () => {
         pitch: 30,
         bearing: 0,
       },
-      { air: true, water: false, space: true },
+      NO_EARTH_LAYERS,
     );
 
     expect(hasMeaningfulViewportChange(previous, next)).toBe(true);

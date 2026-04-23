@@ -1,35 +1,39 @@
 'use client';
 
-import { startTransition, useEffect, useMemo, useState } from 'react';
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { ViewportQueryScheduler } from '@/features/globe/lib/ViewportQueryScheduler';
 import { buildViewportQuery } from '@/features/globe/lib/viewport';
-import { INITIAL_VIEW_STATE } from '@/features/globe/lib/mapStyle';
+import { INITIAL_VIEW_STATE, type MapStyleId } from '@/features/globe/lib/mapStyle';
+import {
+  DEFAULT_SOURCE_IDS,
+  SOURCE_DEFINITION_BY_ID,
+  SOURCE_DEFINITIONS,
+} from '@/features/sources/sourceRegistry';
+import { fetchSourceSnapshot, getOrbitPath } from '@/features/sources/sourceFetchers';
+import { inspectLatestImagery } from '@/features/sources/imageryInspection';
+import { SourceScheduler } from '@/features/sources/sourceScheduler';
+import type { ImageryInspection, SourceHealth, SourceIndicator } from '@/features/sources/types';
 import { buildRenderIntents, getVisibleRenderIntents } from '@/features/traffic/render/renderIntents';
-import { createAirProvider } from '@/features/traffic/providers/airProvider';
-import { ProviderRegistry } from '@/features/traffic/providers/providerRegistry';
-import { createSpaceProvider } from '@/features/traffic/providers/spaceProvider';
-import { createWaterProvider } from '@/features/traffic/providers/waterProvider';
 import { SceneStore } from '@/features/traffic/scene/SceneStore';
 import type {
-  EntityCategory,
   GlobeViewState,
-  LayerVisibility,
-  ProviderHealth,
   TrackedEntity,
 } from '@/features/traffic/types';
+import { DEFAULT_PREFERENCES, loadPreferences, savePreferences } from '@/lib/preferences';
+import {
+  activeSourceIdsToLayers,
+  buildResetDataPointState,
+} from '@/features/world-eye/dataPointState';
 
-const DEFAULT_LAYERS: LayerVisibility = {
-  air: true,
-  water: true,
-  space: true,
-};
+export type ToolMode = 'select' | 'inspect';
 
-const DEFAULT_CATEGORIES: Record<EntityCategory, boolean> = {
-  civilian: true,
-  military: true,
-  research: true,
-};
+const VIEWPORT_SENSITIVE_SOURCE_IDS = new Set([
+  'air.adsb',
+  'weather.open-meteo',
+  'air-quality.open-meteo',
+  'marine.open-meteo',
+  'flood.open-meteo',
+]);
 
 function refreshInterval(detail: 'low' | 'medium' | 'high'): number {
   switch (detail) {
@@ -42,49 +46,109 @@ function refreshInterval(detail: 'low' | 'medium' | 'high'): number {
   }
 }
 
-function buildAppStatus(providerHealth: Record<string, ProviderHealth>) {
-  const providers = Object.values(providerHealth);
-  if (providers.length === 0) {
+function buildAppStatus(sourceHealth: Record<string, SourceHealth>) {
+  const sources = Object.values(sourceHealth);
+
+  if (sources.length === 0) {
     return 'loading' as const;
   }
-  if (providers.some((provider) => provider.status === 'degraded' || provider.status === 'error')) {
-    return 'degraded' as const;
+
+  const hasReady = sources.some((source) => source.status === 'ready');
+  const hasLimited = sources.some((source) =>
+    ['degraded', 'rate_limited', 'timeout', 'unsupported_region', 'offline', 'error'].includes(source.status),
+  );
+
+  if (hasReady || hasLimited) {
+    return hasLimited ? ('degraded' as const) : ('ready' as const);
   }
-  if (providers.some((provider) => provider.status === 'loading')) {
-    return 'loading' as const;
+
+  return 'loading' as const;
+}
+
+function validSourceIds(sourceIds: string[]): string[] {
+  const known = new Set(SOURCE_DEFINITIONS.map((source) => source.id));
+  const filtered = sourceIds.filter((sourceId) => known.has(sourceId));
+  return sourceIds.length === 0 || filtered.length > 0 ? filtered : DEFAULT_SOURCE_IDS;
+}
+
+export function buildSourceQueryKey(sourceId: string, queryKey: string, retryRevision: number): string {
+  const scope = VIEWPORT_SENSITIVE_SOURCE_IDS.has(sourceId) ? queryKey : 'global';
+  return `${sourceId}:${scope}:${retryRevision}`;
+}
+
+function sameSourceIds(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) {
+    return false;
   }
-  return 'ready' as const;
+
+  return left.every((value, index) => value === right[index]);
 }
 
 export function useWorldEyeController() {
   const [retryRevision, setRetryRevision] = useState(0);
-
-  const { registry, spaceProvider } = useMemo(() => {
-    const registry = new ProviderRegistry<TrackedEntity>();
-    registry.register(createAirProvider());
-    registry.register(createWaterProvider());
-    const spaceProvider = createSpaceProvider();
-    registry.register(spaceProvider);
-
-    return { registry, spaceProvider };
-  }, []);
-
   const sceneStore = useMemo(() => new SceneStore(), []);
-  const scheduler = useMemo(() => {
-    void retryRevision;
-    return new ViewportQueryScheduler();
-  }, [retryRevision]);
+  const scheduler = useMemo(() => new SourceScheduler(), []);
+  const inspectAbortRef = useRef<AbortController | null>(null);
 
   const [viewState, setViewState] = useState<GlobeViewState>(INITIAL_VIEW_STATE);
-  const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>(DEFAULT_LAYERS);
-  const [categoryFilters, setCategoryFilters] = useState(DEFAULT_CATEGORIES);
+  const [activeSourceIds, setActiveSourceIds] = useState<string[]>(DEFAULT_SOURCE_IDS);
   const [selectedSystem, setSelectedSystem] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
   const [hoveredEntityId, setHoveredEntityId] = useState<string | null>(null);
-  const [providerHealth, setProviderHealth] = useState<Record<string, ProviderHealth>>({});
+  const [sourceHealth, setSourceHealth] = useState<Record<string, SourceHealth>>({});
+  const [sourceIndicators, setSourceIndicators] = useState<SourceIndicator[]>([]);
   const [sceneRevision, setSceneRevision] = useState(0);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [toolMode, setToolMode] = useState<ToolMode>('select');
+  const [inspection, setInspection] = useState<ImageryInspection | null>(null);
+
+  const [mapStyle, setMapStyleState] = useState<MapStyleId>(DEFAULT_PREFERENCES.mapStyle);
+  const [mapQuality, setMapQualityState] = useState(DEFAULT_PREFERENCES.mapQuality);
+
+  const activeSourceSet = useMemo(() => new Set(activeSourceIds), [activeSourceIds]);
+  const layerVisibility = useMemo(
+    () => activeSourceIdsToLayers(activeSourceIds),
+    [activeSourceIds],
+  );
+
+  useEffect(() => {
+    const prefs = loadPreferences();
+    const timer = window.setTimeout(() => {
+      const nextSourceIds = validSourceIds(prefs.activeSourceIds);
+      setActiveSourceIds((current) => (
+        sameSourceIds(current, nextSourceIds) ? current : nextSourceIds
+      ));
+      setMapStyleState((current) => (current === prefs.mapStyle ? current : prefs.mapStyle));
+      setMapQualityState((current) => (current === prefs.mapQuality ? current : prefs.mapQuality));
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  const setMapStyle = useCallback((style: MapStyleId) => {
+    setMapStyleState(style);
+    savePreferences({ mapStyle: style });
+  }, []);
+
+  const setMapQuality = useCallback((quality: number) => {
+    setMapQualityState(quality);
+    savePreferences({ mapQuality: quality });
+  }, []);
+
+  const resetView = useCallback(() => {
+    setViewState(INITIAL_VIEW_STATE);
+  }, []);
+
+  const resetDataPoints = useCallback(() => {
+    const resetState = buildResetDataPointState();
+    setActiveSourceIds(resetState.activeSourceIds);
+    setSelectedSystem('ALL');
+    setSearchTerm('');
+    setSelectedEntityId(null);
+    setHoveredEntityId(null);
+    savePreferences({ activeSourceIds: resetState.activeSourceIds });
+  }, []);
 
   const query = useMemo(
     () => buildViewportQuery(viewState, layerVisibility),
@@ -93,55 +157,75 @@ export function useWorldEyeController() {
 
   useEffect(() => {
     const controller = new AbortController();
-    const syncProviders = async (force: boolean) => {
-      const now = Date.now();
-      if (!force && !scheduler.shouldFetch(query, now)) {
-        return;
-      }
+    const context = {
+      queryKey: `${query.key}:${activeSourceIds.slice().sort().join(',')}`,
+      bounds: query.bounds,
+      center: query.center,
+      zoom: query.zoom,
+      signal: controller.signal,
+    };
 
-      const results = await registry.fetchActiveSnapshots(query, controller.signal);
+    const syncSources = async () => {
+      const activeDefinitions = SOURCE_DEFINITIONS.filter(
+        (source) =>
+          activeSourceSet.has(source.id) &&
+          (source.capabilities.includes('snapshot') || source.capabilities.includes('indicator')),
+      );
+
+      const results = await Promise.all(
+        activeDefinitions.map((definition) =>
+          scheduler.fetch(
+            definition,
+            {
+              ...context,
+              queryKey: buildSourceQueryKey(definition.id, context.queryKey, retryRevision),
+            },
+            fetchSourceSnapshot,
+          ),
+        ),
+      );
+
       if (controller.signal.aborted) {
         return;
       }
 
-      const nextHealth: Record<string, ProviderHealth> = {};
-      results.results.forEach((result) => {
-        sceneStore.replaceProvider(result.health.providerId, result.entities);
-        nextHealth[result.health.providerId] = result.health;
+      const nextHealth: Record<string, SourceHealth> = {};
+      const nextIndicators: SourceIndicator[] = [];
+
+      results.forEach((result) => {
+        sceneStore.replaceProvider(result.sourceId, result.entities);
+        nextHealth[result.sourceId] = result.health;
+        nextIndicators.push(...result.indicators);
       });
 
-      scheduler.markFetched(query, now);
       startTransition(() => {
-        setProviderHealth((previous) => ({ ...previous, ...nextHealth }));
+        setSourceHealth((previous) => ({ ...previous, ...nextHealth }));
+        setSourceIndicators(nextIndicators);
         setSceneRevision((value) => value + 1);
         setLastUpdated(new Date().toISOString());
       });
     };
 
-    void syncProviders(true);
+    void syncSources();
 
     const intervalId = window.setInterval(() => {
-      void syncProviders(false);
+      void syncSources();
     }, refreshInterval(query.detail));
 
     return () => {
       controller.abort();
       window.clearInterval(intervalId);
     };
-  }, [query, registry, scheduler, sceneStore]);
-
-  useEffect(() => {
-    return () => {
-      registry.teardown();
-    };
-  }, [registry]);
+  }, [activeSourceIds, activeSourceSet, query, retryRevision, sceneStore, scheduler]);
 
   const rawVisibleEntities = useMemo(
     () => {
       void sceneRevision;
-      return sceneStore.getVisibleEntities(query);
+      return sceneStore
+        .getVisibleEntities(query)
+        .filter((entity) => activeSourceSet.has(entity.sourceId ?? entity.providerId));
     },
-    [query, sceneRevision, sceneStore],
+    [activeSourceSet, query, sceneRevision, sceneStore],
   );
 
   const systems = useMemo(
@@ -166,10 +250,6 @@ export function useWorldEyeController() {
 
   const filteredEntities = useMemo(() => {
     return rawVisibleEntities.filter((entity) => {
-      if (!categoryFilters[entity.classification.category]) {
-        return false;
-      }
-
       if (selectedSystem !== 'ALL' && entity.classification.system !== selectedSystem) {
         return false;
       }
@@ -180,7 +260,7 @@ export function useWorldEyeController() {
 
       return searchResults.some((candidate) => candidate.id === entity.id);
     });
-  }, [categoryFilters, rawVisibleEntities, searchResults, searchTerm, selectedSystem]);
+  }, [rawVisibleEntities, searchResults, searchTerm, selectedSystem]);
 
   const renderIntents = useMemo(
     () =>
@@ -209,51 +289,96 @@ export function useWorldEyeController() {
 
   const orbitPath =
     selectedEntity?.kind === 'space'
-      ? spaceProvider.getOrbitPath(selectedEntity.id)
+      ? getOrbitPath(selectedEntity.id)
       : [];
 
+  const inspectLocation = useCallback(async (coordinate: [number, number]) => {
+    inspectAbortRef.current?.abort();
+    const controller = new AbortController();
+    inspectAbortRef.current = controller;
+    setInspection({
+      coordinate,
+      requestedAt: new Date().toISOString(),
+      status: 'loading',
+      summary: 'Searching newest open satellite imagery...',
+    });
+
+    const result = await inspectLatestImagery(coordinate, controller.signal);
+    if (!controller.signal.aborted) {
+      setInspection(result);
+    }
+  }, []);
+
+  const updateSource = useCallback((sourceId: string, value: boolean) => {
+    setActiveSourceIds((current) => {
+      const next = value
+        ? [...new Set([...current, sourceId])]
+        : current.filter((candidate) => candidate !== sourceId);
+
+      if (!value) {
+        sceneStore.replaceProvider(sourceId, []);
+        scheduler.clear(sourceId);
+      }
+
+      savePreferences({ activeSourceIds: next });
+      return next;
+    });
+  }, [sceneStore, scheduler]);
+
   return {
-    appStatus: buildAppStatus(providerHealth),
-    categoryFilters,
+    activeSourceIds,
+    appStatus: buildAppStatus(sourceHealth),
     counts,
     filteredCount: filteredEntities.length,
     filteredEntities,
     hoveredEntity,
-    layerVisibility,
+    inspection,
     lastUpdated,
+    layerVisibility,
+    mapQuality,
+    mapStyle,
     orbitPath,
-    providerHealth,
     renderIntents,
     searchResults,
     searchTerm,
     selectedEntity,
     selectedSystem,
+    sourceDefinitions: SOURCE_DEFINITIONS,
+    sourceHealth,
+    sourceIndicators,
     systems,
+    toolMode,
     viewState,
     clearSelection() {
       setSelectedEntityId(null);
     },
+    clearInspection() {
+      inspectAbortRef.current?.abort();
+      setInspection(null);
+    },
+    inspectLocation,
+    resetView,
     retrySync() {
+      scheduler.clear();
       setRetryRevision((value) => value + 1);
     },
+    resetDataPoints,
     selectEntity(entity: TrackedEntity) {
       setSelectedEntityId(entity.id);
-      setViewState((current) => ({
-        ...current,
-        longitude: entity.coordinates.longitude,
-        latitude: entity.coordinates.latitude,
-        zoom: entity.kind === 'space' ? 5.5 : 6.5,
-      }));
     },
     setHoveredEntityId,
+    setMapQuality,
+    setMapStyle,
     setSearchTerm,
     setSelectedSystem,
+    setToolMode,
     setViewState,
-    updateCategory(category: EntityCategory, value: boolean) {
-      setCategoryFilters((current) => ({ ...current, [category]: value }));
+    toggleInspectMode() {
+      setToolMode((mode) => (mode === 'inspect' ? 'select' : 'inspect'));
     },
-    updateLayer(kind: keyof LayerVisibility, value: boolean) {
-      setLayerVisibility((current) => ({ ...current, [kind]: value }));
+    updateSource,
+    getSource(sourceId: string) {
+      return SOURCE_DEFINITION_BY_ID.get(sourceId);
     },
   };
 }

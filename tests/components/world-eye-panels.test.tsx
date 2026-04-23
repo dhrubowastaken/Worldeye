@@ -1,54 +1,68 @@
 import { render, screen } from '@testing-library/react';
 
-import { InsightPanel } from '@/features/world-eye/components/InsightPanel';
-import { StatusBanner } from '@/features/world-eye/components/StatusBanner';
-import type { ProviderHealth } from '@/features/traffic/types';
+import { SelectionCard } from '@/features/world-eye/components/SelectionCard';
+import type { TrackedEntity } from '@/features/traffic/types';
 
-const providerHealth: Record<string, ProviderHealth> = {
-  'air-provider': {
-    providerId: 'air-provider',
-    status: 'ready',
-    summary: 'Tracking aircraft',
-    updatedAt: '2026-04-17T00:00:00.000Z',
-    retryable: true,
+const mockEntity: TrackedEntity = {
+  id: 'test-entity-1',
+  label: 'Test Aircraft',
+  kind: 'air',
+  classification: {
+    category: 'civilian',
+    system: 'ADS-B',
   },
-  'space-provider': {
-    providerId: 'space-provider',
-    status: 'degraded',
-    summary: 'Catalog fallback active',
-    updatedAt: '2026-04-17T00:00:00.000Z',
-    retryable: true,
+  coordinates: {
+    latitude: 51.47,
+    longitude: -0.46,
+    altitude: 10668,
   },
+  metrics: {
+    speed: 450,
+    heading: 90,
+  },
+  metadata: {},
+  freshness: {
+    updatedAt: '2026-04-17T00:00:00.000Z',
+    stale: false,
+  },
+  providerId: 'air-provider',
 };
 
-describe('InsightPanel', () => {
-  test('renders totals and provider summaries for the intelligence shell', () => {
-    render(
-      <InsightPanel
-        counts={{ air: 12, water: 8, space: 24 }}
-        filteredCount={21}
-        lastUpdated="2026-04-17T00:00:00.000Z"
-        providerHealth={providerHealth}
+describe('SelectionCard', () => {
+  test('renders nothing when no entity is provided', () => {
+    const { container } = render(
+      <SelectionCard
+        selectedEntity={null}
+        hoveredEntity={null}
+        onClearSelection={() => undefined}
       />,
     );
 
-    expect(screen.getByText('Operational Picture')).toBeInTheDocument();
-    expect(screen.getByText('24')).toBeInTheDocument();
-    expect(screen.getByText('Catalog fallback active')).toBeInTheDocument();
+    expect(container.firstChild).toBeNull();
   });
-});
 
-describe('StatusBanner', () => {
-  test('shows degraded providers and exposes retry affordance', () => {
+  test('renders entity details when hovered', () => {
     render(
-      <StatusBanner
-        appStatus="degraded"
-        providerHealth={providerHealth}
-        onRetry={() => undefined}
+      <SelectionCard
+        selectedEntity={null}
+        hoveredEntity={mockEntity}
+        onClearSelection={() => undefined}
       />,
     );
 
-    expect(screen.getByText(/degraded provider/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /retry sync/i })).toBeInTheDocument();
+    expect(screen.getByText('Test Aircraft')).toBeInTheDocument();
+    expect(screen.getByText('51.47')).toBeInTheDocument();
+  });
+
+  test('shows close button when entity is selected', () => {
+    render(
+      <SelectionCard
+        selectedEntity={mockEntity}
+        hoveredEntity={null}
+        onClearSelection={() => undefined}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: /clear selection/i })).toBeInTheDocument();
   });
 });
