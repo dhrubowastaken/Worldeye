@@ -16,6 +16,7 @@ import type { ImageryInspection, SourceHealth, SourceIndicator } from '@/feature
 import { buildRenderIntents, getVisibleRenderIntents } from '@/features/traffic/render/renderIntents';
 import { SceneStore } from '@/features/traffic/scene/SceneStore';
 import type {
+  EntityCategory,
   GlobeViewState,
   TrackedEntity,
 } from '@/features/traffic/types';
@@ -92,6 +93,7 @@ export function useWorldEyeController() {
 
   const [viewState, setViewState] = useState<GlobeViewState>(INITIAL_VIEW_STATE);
   const [activeSourceIds, setActiveSourceIds] = useState<string[]>(DEFAULT_SOURCE_IDS);
+  const [activeCategories, setActiveCategories] = useState<Record<EntityCategory, boolean>>(DEFAULT_PREFERENCES.categories);
   const [selectedSystem, setSelectedSystem] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
@@ -119,6 +121,10 @@ export function useWorldEyeController() {
       setActiveSourceIds((current) => (
         sameSourceIds(current, nextSourceIds) ? current : nextSourceIds
       ));
+      setActiveCategories((current) => ({
+        ...current,
+        ...prefs.categories,
+      }));
       setMapStyleState((current) => (current === prefs.mapStyle ? current : prefs.mapStyle));
       setMapQualityState((current) => (current === prefs.mapQuality ? current : prefs.mapQuality));
     }, 0);
@@ -143,11 +149,15 @@ export function useWorldEyeController() {
   const resetDataPoints = useCallback(() => {
     const resetState = buildResetDataPointState();
     setActiveSourceIds(resetState.activeSourceIds);
+    setActiveCategories(resetState.categories);
     setSelectedSystem('ALL');
     setSearchTerm('');
     setSelectedEntityId(null);
     setHoveredEntityId(null);
-    savePreferences({ activeSourceIds: resetState.activeSourceIds });
+    savePreferences({
+      activeSourceIds: resetState.activeSourceIds,
+      categories: resetState.categories,
+    });
   }, []);
 
   const query = useMemo(
@@ -250,6 +260,10 @@ export function useWorldEyeController() {
 
   const filteredEntities = useMemo(() => {
     return rawVisibleEntities.filter((entity) => {
+      if (!activeCategories[entity.classification.category]) {
+        return false;
+      }
+
       if (selectedSystem !== 'ALL' && entity.classification.system !== selectedSystem) {
         return false;
       }
@@ -260,7 +274,7 @@ export function useWorldEyeController() {
 
       return searchResults.some((candidate) => candidate.id === entity.id);
     });
-  }, [rawVisibleEntities, searchResults, searchTerm, selectedSystem]);
+  }, [activeCategories, rawVisibleEntities, searchResults, searchTerm, selectedSystem]);
 
   const renderIntents = useMemo(
     () =>
@@ -325,7 +339,20 @@ export function useWorldEyeController() {
     });
   }, [sceneStore, scheduler]);
 
+  const updateCategory = useCallback((category: EntityCategory, value: boolean) => {
+    setActiveCategories((current) => {
+      const next = {
+        ...current,
+        [category]: value,
+      };
+
+      savePreferences({ categories: next });
+      return next;
+    });
+  }, []);
+
   return {
+    activeCategories,
     activeSourceIds,
     appStatus: buildAppStatus(sourceHealth),
     counts,
@@ -376,6 +403,7 @@ export function useWorldEyeController() {
     toggleInspectMode() {
       setToolMode((mode) => (mode === 'inspect' ? 'select' : 'inspect'));
     },
+    updateCategory,
     updateSource,
     getSource(sourceId: string) {
       return SOURCE_DEFINITION_BY_ID.get(sourceId);

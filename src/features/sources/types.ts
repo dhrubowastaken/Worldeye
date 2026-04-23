@@ -97,9 +97,19 @@ export interface ImageryInspection {
   layer?: string;
   sceneDate?: string;
   cloudCover?: number;
+  usability?: 'usable-ground' | 'cloud-obscured' | 'browse-fallback';
   previewUrl?: string;
   tileUrl?: string;
   sourceUrl?: string;
+  alternates?: Array<{
+    id?: string;
+    provider?: string;
+    sceneDate?: string;
+    cloudCover?: number;
+    previewUrl?: string;
+    sourceUrl?: string;
+    reason: string;
+  }>;
   summary: string;
 }
 

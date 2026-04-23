@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo } from 'react';
 import Map, { Layer, Source } from 'react-map-gl/maplibre';
-import type { Feature, FeatureCollection, LineString, Point } from 'geojson';
+import type { Feature, FeatureCollection, LineString, Point, Polygon } from 'geojson';
 import maplibregl from 'maplibre-gl';
 import type { MapLayerMouseEvent, ViewStateChangeEvent } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -58,6 +58,7 @@ function buildFeatureCollections(entities: TrackedEntity[]) {
   const air: EntityFeature[] = [];
   const space: EntityFeature[] = [];
   const events: EntityFeature[] = [];
+  const areas: Array<Feature<Polygon, { id: string; color?: string }>> = [];
 
   entities.forEach((entity) => {
     const feature = toFeature(entity);
@@ -68,12 +69,29 @@ function buildFeatureCollections(entities: TrackedEntity[]) {
     } else {
       events.push(feature);
     }
+
+    const radiusKm = numericMetadata(entity.metadata.impactRadiusKm);
+    if (radiusKm) {
+      areas.push({
+        type: 'Feature',
+        geometry: buildCirclePolygon(
+          entity.coordinates.longitude,
+          entity.coordinates.latitude,
+          radiusKm,
+        ),
+        properties: {
+          id: entity.id,
+          color: feature.properties.color,
+        },
+      });
+    }
   });
 
   return {
     air: { type: 'FeatureCollection', features: air } satisfies FeatureCollection<Point>,
     space: { type: 'FeatureCollection', features: space } satisfies FeatureCollection<Point>,
     events: { type: 'FeatureCollection', features: events } satisfies FeatureCollection<Point>,
+    areas: { type: 'FeatureCollection', features: areas } satisfies FeatureCollection<Polygon>,
   };
 }
 
@@ -173,7 +191,7 @@ export function WorldMap({
         key={`${mapStyleId}-${mapQuality}`}
         {...viewState}
         attributionControl={false}
-        interactiveLayerIds={['space-points', 'event-points', 'air-symbols']}
+        interactiveLayerIds={['space-points', 'event-points', 'air-symbols', 'event-area-fill']}
         mapLib={maplibregl}
         mapStyle={mapStyle}
         maxPitch={85}
@@ -270,6 +288,36 @@ export function WorldMap({
           />
         </Source>
 
+        <Source id="event-area-source" type="geojson" data={featureCollections.areas}>
+          <Layer
+            id="event-area-fill"
+            type="fill"
+            paint={{
+              'fill-color': ['get', 'color'],
+              'fill-opacity': [
+                'case',
+                ['==', ['get', 'id'], selectedEntityId ?? ''],
+                0.18,
+                0.08,
+              ],
+            }}
+          />
+          <Layer
+            id="event-area-outline"
+            type="line"
+            paint={{
+              'line-color': ['get', 'color'],
+              'line-width': [
+                'case',
+                ['==', ['get', 'id'], selectedEntityId ?? ''],
+                2,
+                1,
+              ],
+              'line-opacity': 0.5,
+            }}
+          />
+        </Source>
+
         <Source id="label-source" type="geojson" data={labelCollection}>
           <Layer
             id="labels"
@@ -303,4 +351,28 @@ export function WorldMap({
       </Map>
     </div>
   );
+}
+
+function numericMetadata(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function buildCirclePolygon(longitude: number, latitude: number, radiusKm: number): Polygon {
+  const steps = 48;
+  const latDelta = radiusKm / 111;
+  const lonDelta = radiusKm / (111 * Math.max(0.2, Math.cos((latitude * Math.PI) / 180)));
+  const ring: number[][] = [];
+
+  for (let index = 0; index <= steps; index += 1) {
+    const angle = (index / steps) * Math.PI * 2;
+    ring.push([
+      longitude + lonDelta * Math.cos(angle),
+      latitude + latDelta * Math.sin(angle),
+    ]);
+  }
+
+  return {
+    type: 'Polygon',
+    coordinates: [ring],
+  };
 }

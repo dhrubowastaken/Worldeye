@@ -47,7 +47,7 @@ async function inspectEarthSearch(
       collections: ['sentinel-2-l2a', 'landsat-c2-l2'],
       bbox: [longitude - delta, latitude - delta, longitude + delta, latitude + delta],
       datetime: '2020-01-01/..',
-      limit: 1,
+      limit: 8,
       sortby: [{ field: 'properties.datetime', direction: 'desc' }],
     }),
   });
@@ -62,7 +62,43 @@ async function inspectEarthSearch(
   }
 
   const payload = (await response.json()) as StacSearchResponse;
-  const item = payload.features?.[0];
+  const candidates = (payload.features ?? []).map((item) => {
+    const preview =
+      item.assets?.thumbnail?.href ??
+      item.assets?.rendered_preview?.href ??
+      item.assets?.visual?.href;
+    const cloudCover = item.properties?.['eo:cloud_cover'];
+    const usable =
+      typeof cloudCover !== 'number'
+        ? 1
+        : cloudCover <= 35
+          ? 2
+          : 0;
+
+    return {
+      id: item.id,
+      provider: item.properties?.platform ?? 'Element84 Earth Search',
+      collection: item.collection,
+      sceneDate: item.properties?.datetime,
+      cloudCover,
+      previewUrl: preview,
+      sourceUrl: item.links?.find((link) => link.rel === 'self')?.href,
+      usable,
+      reason:
+        usable === 2
+          ? 'Recent visible-ground scene'
+          : `Cloud cover ${typeof cloudCover === 'number' ? `${cloudCover.toFixed(1)}%` : 'unknown'}`,
+    };
+  });
+
+  const item = [...candidates].sort((left, right) => {
+    if (left.usable !== right.usable) {
+      return right.usable - left.usable;
+    }
+
+    return Date.parse(right.sceneDate ?? '') - Date.parse(left.sceneDate ?? '');
+  })[0];
+
   if (!item) {
     return {
       coordinate,
@@ -72,22 +108,33 @@ async function inspectEarthSearch(
     };
   }
 
-  const preview =
-    item.assets?.thumbnail?.href ??
-    item.assets?.rendered_preview?.href ??
-    item.assets?.visual?.href;
-
   return {
     coordinate,
     requestedAt,
     status: 'ready',
-    provider: item.properties?.platform ?? 'Element84 Earth Search',
+    provider: item.provider,
     collection: item.collection,
-    sceneDate: item.properties?.datetime,
-    cloudCover: item.properties?.['eo:cloud_cover'],
-    previewUrl: preview,
-    sourceUrl: item.links?.find((link) => link.rel === 'self')?.href,
-    summary: `Newest scene: ${item.collection ?? 'Earth Search'} ${item.properties?.datetime ?? ''}`.trim(),
+    sceneDate: item.sceneDate,
+    cloudCover: item.cloudCover,
+    usability: item.usable === 2 ? 'usable-ground' : 'cloud-obscured',
+    previewUrl: item.previewUrl,
+    sourceUrl: item.sourceUrl,
+    alternates: candidates
+      .filter((candidate) => candidate.id !== item.id)
+      .slice(0, 3)
+      .map((candidate) => ({
+        id: candidate.id,
+        provider: candidate.provider,
+        sceneDate: candidate.sceneDate,
+        cloudCover: candidate.cloudCover,
+        previewUrl: candidate.previewUrl,
+        sourceUrl: candidate.sourceUrl,
+        reason: candidate.reason,
+      })),
+    summary:
+      item.usable === 2
+        ? `Best usable ground scene: ${item.collection ?? 'Earth Search'} ${item.sceneDate ?? ''}`.trim()
+        : `Newest scene is cloud-obscured: ${item.collection ?? 'Earth Search'} ${item.sceneDate ?? ''}`.trim(),
   };
 }
 
@@ -115,6 +162,7 @@ function inspectGibs(
     collection: 'MODIS_Terra_CorrectedReflectance_TrueColor',
     layer: 'True Color',
     sceneDate: date,
+    usability: 'browse-fallback',
     tileUrl,
     sourceUrl: 'https://nasa-gibs.github.io/gibs-api-docs/access-basics/',
     summary: 'Using NASA GIBS browse imagery fallback',

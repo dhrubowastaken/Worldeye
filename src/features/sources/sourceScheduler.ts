@@ -21,6 +21,7 @@ interface SourceState {
   lastFetchedAt?: number;
   lastQueryKey?: string;
   lastResult?: SourceResult;
+  lastGoodResult?: SourceResult;
 }
 
 export class SourceScheduler {
@@ -57,12 +58,17 @@ export class SourceScheduler {
 
     const promise = this.runWithTimeout(definition, context, fetcher)
       .then((result) => {
+        const mergedResult = this.mergeWithLastGood(result, currentState.lastGoodResult);
         this.state.set(definition.id, {
           lastFetchedAt: this.now(),
           lastQueryKey: context.queryKey,
-          lastResult: result,
+          lastResult: mergedResult,
+          lastGoodResult:
+            result.health.status === 'ready'
+              ? result
+              : currentState.lastGoodResult,
         });
-        return result;
+        return mergedResult;
       })
       .catch((error: unknown) => {
         const result = emptySourceResult(
@@ -75,8 +81,9 @@ export class SourceScheduler {
           lastFetchedAt: this.now(),
           lastQueryKey: context.queryKey,
           lastResult: result,
+          lastGoodResult: currentState.lastGoodResult,
         });
-        return result;
+        return this.mergeWithLastGood(result, currentState.lastGoodResult);
       });
 
     this.state.set(definition.id, {
@@ -148,5 +155,35 @@ export class SourceScheduler {
           parentSignal?.removeEventListener('abort', abort);
         });
     });
+  }
+
+  private mergeWithLastGood(
+    result: SourceResult,
+    lastGoodResult?: SourceResult,
+  ): SourceResult {
+    if (
+      result.health.status === 'ready' ||
+      result.entities.length > 0 ||
+      !lastGoodResult ||
+      lastGoodResult.entities.length === 0
+    ) {
+      return result;
+    }
+
+    return {
+      ...result,
+      entities: lastGoodResult.entities.map((entity) => ({
+        ...entity,
+        freshness: {
+          ...entity.freshness,
+          stale: true,
+        },
+      })),
+      indicators: lastGoodResult.indicators,
+      warnings: [
+        ...result.warnings,
+        'Showing the last successful in-memory snapshot while this source recovers.',
+      ],
+    };
   }
 }

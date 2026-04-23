@@ -20,12 +20,18 @@ const mockEntity: TrackedEntity = {
     speed: 450,
     heading: 90,
   },
-  metadata: {},
   freshness: {
     updatedAt: '2026-04-17T00:00:00.000Z',
     stale: false,
   },
   providerId: 'air-provider',
+  observedAt: '2026-04-17T00:00:00.000Z',
+  updatedAt: '2026-04-17T00:03:00.000Z',
+  confidence: 0.84,
+  metadata: {
+    summary: 'Stable air corridor',
+    whyItMatters: 'Useful for traffic monitoring.',
+  },
 };
 
 describe('SelectionCard', () => {
@@ -64,5 +70,33 @@ describe('SelectionCard', () => {
     );
 
     expect(screen.getByRole('button', { name: /clear selection/i })).toBeInTheDocument();
+  });
+
+  test('surfaces richer incident details without changing the card layout', () => {
+    render(
+      <SelectionCard
+        selectedEntity={{
+          ...mockEntity,
+          id: 'eq-1',
+          kind: 'earth',
+          label: 'M 6.1 - Test Region',
+          severity: 'high',
+          metadata: {
+            summary: 'Strong shallow earthquake near the coast.',
+            affectedArea: 'Estimated impact radius 140 km',
+            whyItMatters: 'Ports and regional logistics may be disrupted.',
+            tsunami: true,
+            alertLevel: 'orange',
+          },
+        }}
+        hoveredEntity={null}
+        onClearSelection={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText('Strong shallow earthquake near the coast.')).toBeInTheDocument();
+    expect(screen.getByText(/Estimated impact radius 140 km/i)).toBeInTheDocument();
+    expect(screen.getByText(/Ports and regional logistics may be disrupted/i)).toBeInTheDocument();
+    expect(screen.getByText(/orange/i)).toBeInTheDocument();
   });
 });

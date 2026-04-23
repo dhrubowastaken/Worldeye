@@ -241,9 +241,28 @@ async function fetchEarthquakes(
         altitude: (coordinates[2] ?? 0) * -1000,
         sourceId: source.id,
         observedAt: time,
+        updatedAt: dateValue(properties.updated),
         metrics: { value: magnitude, unit: 'M' },
         confidence: 0.9,
-        metadata: properties,
+        metadata: {
+          ...properties,
+          summary: buildEarthquakeSummary(title, magnitude, properties),
+          affectedArea: `Estimated impact radius ${earthquakeImpactRadiusKm(magnitude)} km`,
+          whyItMatters: buildEarthquakeImportance(magnitude, properties),
+          alertLevel: stringValue(properties.alert) ?? 'n/a',
+          feltReports: numberValue(properties.felt),
+          tsunami: properties.tsunami === 1,
+          impactRadiusKm: earthquakeImpactRadiusKm(magnitude),
+        },
+        renderables: [
+          {
+            overlayType: 'impact-radius',
+            priority: 2,
+            payload: {
+              radiusKm: earthquakeImpactRadiusKm(magnitude),
+            },
+          },
+        ],
         links: linkValue(properties.url, 'USGS event'),
       });
     })
@@ -297,7 +316,14 @@ async function fetchEonet(
         sourceId: source.id,
         observedAt: date,
         confidence: 0.78,
-        metadata: properties,
+        metadata: {
+          ...properties,
+          summary: `${title} is active in the NASA EONET feed.`,
+          affectedArea: geometryLabel(feature.geometry?.type),
+          whyItMatters: 'Natural event feeds help track evolving hazards that can affect infrastructure, logistics, and safety.',
+          geometryType: feature.geometry?.type,
+          geometryCoordinates: feature.geometry?.coordinates,
+        },
         links: linkValue(properties.link, 'NASA EONET event'),
       });
     })
@@ -356,7 +382,13 @@ async function fetchGdacs(
         sourceId: source.id,
         observedAt: stringValue(properties.fromdate) ?? stringValue(properties.datemodified) ?? nowIso(),
         confidence: 0.82,
-        metadata: properties,
+        metadata: {
+          ...properties,
+          summary: 'GDACS is flagging a high-severity disaster alert for this area.',
+          affectedArea: geometryLabel(undefined),
+          whyItMatters: 'High GDACS alert levels can point to population, logistics, and emergency-response disruption.',
+          alertLevel: alert || 'unknown',
+        },
         links: linkValue(properties.url, 'GDACS event'),
       });
     })
@@ -403,7 +435,11 @@ async function fetchWeather(
     sourceId: source.id,
     observedAt,
     metrics: { value: temp, unit: payload.current_units?.temperature_2m ?? 'C', speed: wind ?? 0 },
-    metadata: payload.current ?? {},
+    metadata: {
+      ...(payload.current ?? {}),
+      summary: 'Current weather sample at the map center.',
+      whyItMatters: 'Weather influences visibility, air operations, and overall regional operating conditions.',
+    },
   });
 
   return readyResult(
@@ -448,7 +484,11 @@ async function fetchAirQuality(
     sourceId: source.id,
     observedAt,
     metrics: { value: aqi, unit: 'EAQI' },
-    metadata: payload.current ?? {},
+    metadata: {
+      ...(payload.current ?? {}),
+      summary: 'Current air-quality sample at the map center.',
+      whyItMatters: 'Air quality affects visibility, health risk, and how long field activity can be sustained.',
+    },
   });
 
   return readyResult(
@@ -497,7 +537,11 @@ async function fetchMarine(
     sourceId: source.id,
     observedAt,
     metrics: { value: waveHeight, unit: 'm' },
-    metadata: payload.current ?? {},
+    metadata: {
+      ...(payload.current ?? {}),
+      summary: 'Current sea-state sample at the map center.',
+      whyItMatters: 'Marine conditions can constrain ports, chokepoints, and offshore activity.',
+    },
   });
 
   return readyResult(
@@ -546,7 +590,12 @@ async function fetchFlood(
     sourceId: source.id,
     observedAt,
     metrics: { value: discharge, unit: 'm3/s' },
-    metadata: payload.daily ?? {},
+    metadata: {
+      ...(payload.daily ?? {}),
+      summary: 'Current flood indicator at the map center.',
+      affectedArea: 'River basin indicator',
+      whyItMatters: 'High discharge can foreshadow flooding and transport disruption downstream.',
+    },
   });
 
   return readyResult(source, [entity], indicator(source, 'river-discharge', entity.label, discharge, entity.severity ?? 'info', observedAt), 'Flood indicator loaded for map center');
@@ -581,7 +630,11 @@ async function fetchSpaceWeather(
     sourceId: source.id,
     observedAt,
     metrics: { value: kp, unit: 'Kp' },
-    metadata: latest,
+    metadata: {
+      ...latest,
+      summary: 'Latest NOAA planetary K-index reading.',
+      whyItMatters: 'Geomagnetic activity can affect communications, GNSS, and satellite operations.',
+    },
   });
 
   return readyResult(
@@ -627,6 +680,8 @@ async function fetchGdeltMediaSignals(
     metadata: {
       caveat: 'Media-derived signal, not authoritative conflict ground truth.',
       articles: articles.slice(0, 5),
+      summary: 'Media-derived signal density for conflict, protest, or disruption topics.',
+      whyItMatters: 'Useful as an early lead for open-source intelligence, but not authoritative by itself.',
     },
     links: articles
       .map((article) => ({
@@ -760,6 +815,45 @@ function severityFromThresholds(
 function linkValue(value: unknown, label: string): Array<{ label: string; url: string }> {
   const url = stringValue(value);
   return url ? [{ label, url }] : [];
+}
+
+function earthquakeImpactRadiusKm(magnitude: number | undefined): number {
+  if (typeof magnitude !== 'number' || !Number.isFinite(magnitude)) {
+    return 40;
+  }
+
+  if (magnitude >= 7) return 220;
+  if (magnitude >= 6) return 140;
+  if (magnitude >= 5) return 80;
+  return 40;
+}
+
+function buildEarthquakeSummary(
+  title: string,
+  magnitude: number | undefined,
+  properties: Record<string, unknown>,
+): string {
+  const place = stringValue(properties.place);
+  return `${title}${place ? ` near ${place}` : ''} was recorded at magnitude ${formatNumber(magnitude)}.`;
+}
+
+function buildEarthquakeImportance(
+  magnitude: number | undefined,
+  properties: Record<string, unknown>,
+): string {
+  const tsunami = properties.tsunami === 1
+    ? ' Public tsunami messaging is present for this event.'
+    : '';
+  const felt = numberValue(properties.felt);
+  return `Earthquakes can disrupt transport, power, ports, and communications.${typeof felt === 'number' ? ` ${formatNumber(felt)} felt reports were logged.` : ''}${tsunami}`;
+}
+
+function geometryLabel(type: unknown): string {
+  if (typeof type === 'string' && type.trim()) {
+    return `${type} geometry available`;
+  }
+
+  return 'Point-referenced event';
 }
 
 function arrayTitle(value: unknown): string | undefined {

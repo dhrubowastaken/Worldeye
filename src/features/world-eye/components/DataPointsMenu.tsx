@@ -3,11 +3,14 @@
 import { useEffect, useRef } from 'react';
 
 import { DATA_POINT_GROUPS } from '@/features/sources/sourceRegistry';
+import type { EntityCategory } from '@/features/traffic/types';
 
 interface DataPointsMenuProps {
   isOpen: boolean;
   onClose: () => void;
   activeSourceIds: string[];
+  activeCategories: Record<EntityCategory, boolean>;
+  onToggleCategory: (category: EntityCategory, value: boolean) => void;
   onToggleSource: (sourceId: string, value: boolean) => void;
 }
 
@@ -15,6 +18,8 @@ export function DataPointsMenu({
   isOpen,
   onClose,
   activeSourceIds,
+  activeCategories,
+  onToggleCategory,
   onToggleSource,
 }: DataPointsMenuProps) {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -113,6 +118,72 @@ export function DataPointsMenu({
           >
             x
           </button>
+        </div>
+
+        <div style={{ marginBottom: '18px' }}>
+          <p style={{
+            fontFamily: 'var(--font-body)',
+            fontSize: '11px',
+            fontWeight: 600,
+            textTransform: 'uppercase',
+            letterSpacing: '0.16em',
+            color: 'var(--we-text-tertiary)',
+            marginBottom: '12px',
+          }}>
+            Classification
+          </p>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {(['civilian', 'military', 'research'] as EntityCategory[]).map((category) => {
+              const isActive = activeCategories[category];
+              return (
+                <button
+                  key={category}
+                  type="button"
+                  onClick={() => onToggleCategory(category, !isActive)}
+                  className="data-menu-row"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '10px 12px',
+                    border: 'none',
+                    background: isActive ? 'var(--we-accent-dim)' : 'transparent',
+                    cursor: 'pointer',
+                    width: '100%',
+                    textAlign: 'left',
+                  }}
+                >
+                  <span style={{
+                    width: '8px',
+                    height: '8px',
+                    borderRadius: '50%',
+                    background: category === 'civilian' ? '#5AC8FA' : category === 'military' ? '#FF6B6B' : '#FBBF24',
+                    flexShrink: 0,
+                    opacity: isActive ? 1 : 0.4,
+                  }} />
+
+                  <span style={{
+                    fontFamily: 'var(--font-body)',
+                    fontSize: '14px',
+                    fontWeight: 500,
+                    color: isActive ? 'var(--we-text)' : 'var(--we-text-secondary)',
+                    flex: 1,
+                    textTransform: 'capitalize',
+                  }}>
+                    {category}
+                  </span>
+
+                  <span
+                    className="toggle-switch"
+                    data-active={isActive ? 'true' : undefined}
+                    role="switch"
+                    aria-checked={isActive}
+                  />
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {DATA_POINT_GROUPS.map((group, groupIdx) => (

@@ -121,9 +121,11 @@ export function WorldEyeExperience() {
 
       {/* Data points menu — z-index 40, centered modal */}
       <DataPointsMenu
+        activeCategories={controller.activeCategories}
         activeSourceIds={controller.activeSourceIds}
         isOpen={dataMenuOpen}
         onClose={() => setDataMenuOpen(false)}
+        onToggleCategory={controller.updateCategory}
         onToggleSource={controller.updateSource}
       />
     </div>

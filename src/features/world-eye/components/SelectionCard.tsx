@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import type { TrackedEntity } from '@/features/traffic/types';
 
 interface SelectionCardProps {
@@ -12,6 +13,15 @@ export function SelectionCard({
   onClearSelection,
 }: SelectionCardProps) {
   const entity = selectedEntity ?? hoveredEntity;
+  const summary = stringMetadata(entity?.metadata.summary);
+  const affectedArea = stringMetadata(entity?.metadata.affectedArea);
+  const whyItMatters = stringMetadata(entity?.metadata.whyItMatters);
+  const alertLevel = stringMetadata(entity?.metadata.alertLevel);
+  const confidence =
+    typeof entity?.confidence === 'number'
+      ? `${Math.round(entity.confidence * 100)}%`
+      : null;
+  const updatedAt = entity?.updatedAt ?? entity?.freshness.updatedAt;
 
   if (!entity) return null;
 
@@ -105,6 +115,8 @@ export function SelectionCard({
           { label: 'Spd', value: Math.round(entity.metrics.speed).toLocaleString() },
           { label: 'Src', value: entity.sourceId ?? entity.providerId },
           { label: 'Risk', value: entity.severity ?? 'info' },
+          ...(confidence ? [{ label: 'Conf', value: confidence }] : []),
+          ...(alertLevel ? [{ label: 'Alert', value: alertLevel }] : []),
         ].map((stat) => (
           <p
             key={stat.label}
@@ -122,6 +134,51 @@ export function SelectionCard({
           </p>
         ))}
       </div>
+
+      {(summary || affectedArea || whyItMatters || updatedAt) && (
+        <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {summary && (
+            <p style={detailStyle}>
+              {summary}
+            </p>
+          )}
+          {updatedAt && (
+            <p style={detailStyle}>
+              <span style={detailLabelStyle}>Updated</span>
+              {new Date(updatedAt).toLocaleString()}
+            </p>
+          )}
+          {affectedArea && (
+            <p style={detailStyle}>
+              <span style={detailLabelStyle}>Area</span>
+              {affectedArea}
+            </p>
+          )}
+          {whyItMatters && (
+            <p style={detailStyle}>
+              <span style={detailLabelStyle}>Why</span>
+              {whyItMatters}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
+
+function stringMetadata(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value : null;
+}
+
+const detailStyle: CSSProperties = {
+  fontFamily: 'var(--font-body)',
+  fontSize: '12px',
+  fontWeight: 400,
+  color: 'var(--we-text-secondary)',
+  lineHeight: 1.5,
+};
+
+const detailLabelStyle: CSSProperties = {
+  color: 'var(--we-text-tertiary)',
+  marginRight: '6px',
+};

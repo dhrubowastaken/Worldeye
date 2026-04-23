@@ -23,11 +23,16 @@ interface SourceFetchContextContract {
 
 interface SourceFetchResultContract {
   sourceId: string;
-  entities: unknown[];
+  entities: Array<{
+    id: string;
+    freshness?: {
+      stale?: boolean;
+    };
+  }>;
   indicators: unknown[];
   health: {
     sourceId: string;
-    status: 'ready' | 'degraded' | 'timeout' | 'loading';
+    status: 'ready' | 'degraded' | 'timeout' | 'loading' | 'error';
     summary: string;
     updatedAt: string;
     retryable: boolean;
@@ -88,6 +93,27 @@ function buildResult(summary: string): SourceFetchResultContract {
     health: {
       sourceId: definition.id,
       status: 'ready',
+      summary,
+      updatedAt: '2026-04-22T00:00:00.000Z',
+      retryable: true,
+    },
+    warnings: [],
+    links: [],
+  };
+}
+
+function buildResultWithEntities(
+  summary: string,
+  status: SourceFetchResultContract['health']['status'],
+  entities: SourceFetchResultContract['entities'],
+): SourceFetchResultContract {
+  return {
+    sourceId: definition.id,
+    entities,
+    indicators: [],
+    health: {
+      sourceId: definition.id,
+      status,
       summary,
       updatedAt: '2026-04-22T00:00:00.000Z',
       retryable: true,
@@ -168,5 +194,31 @@ describe('SourceScheduler', () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+
+  test('keeps the last good in-memory entities visible when a later refresh degrades', async () => {
+    const SourceScheduler = loadSourceScheduler();
+    let now = 0;
+    const scheduler = new SourceScheduler({ now: () => now });
+    const fetcher = jest
+      .fn<ReturnType<SourceFetcher>, Parameters<SourceFetcher>>()
+      .mockResolvedValueOnce(
+        buildResultWithEntities('first', 'ready', [{ id: 'entity-1' }]),
+      )
+      .mockResolvedValueOnce(
+        buildResultWithEntities('degraded', 'degraded', []),
+      );
+
+    await expect(scheduler.fetch(definition, context, fetcher)).resolves.toMatchObject({
+      health: { status: 'ready' },
+      entities: [{ id: 'entity-1' }],
+    });
+
+    now = 1_500;
+
+    await expect(scheduler.fetch(definition, context, fetcher)).resolves.toMatchObject({
+      health: { status: 'degraded' },
+      entities: [{ id: 'entity-1', freshness: { stale: true } }],
+    });
   });
 });

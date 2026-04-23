@@ -195,6 +195,8 @@ test('loads the intelligence shell and key controls', async ({ page }) => {
   await page.getByRole('button', { name: 'Data points', exact: true }).click();
 
   await expect(page.getByRole('heading', { name: /data sources/i })).toBeVisible();
+  await expect(page.getByText('Classification')).toBeVisible();
+  await expect(page.getByText('Military')).toBeVisible();
   await expect(page.getByText('Traffic')).toBeVisible();
   await expect(page.getByText('Earth Events')).toBeVisible();
   await expect(page.getByText('Media & Imagery')).toBeVisible();
@@ -205,7 +207,8 @@ test('loads the intelligence shell and key controls', async ({ page }) => {
   await page.locator('.maplibregl-canvas').click({ position: { x: 200, y: 200 } });
 
   await expect(page.getByRole('heading', { name: 'Sentinel-2A' })).toBeVisible();
-  await expect(page.getByText(/newest scene: sentinel-2-l2a 2026-04-20t10:12:00.000z/i)).toBeVisible();
+  await expect(page.getByText(/best usable ground scene: sentinel-2-l2a 2026-04-20t10:12:00.000z/i)).toBeVisible();
+  await expect(page.getByText(/ground likely visible/i)).toBeVisible();
   await expect(page.getByText('12.3%')).toBeVisible();
   await expect(page.getByText('2026-04-20T10:12:00.000Z', { exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: /open source/i })).toBeVisible();
